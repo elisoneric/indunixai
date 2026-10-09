@@ -33,5 +33,14 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
             await session.close()
 
 async def init_db():
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    import asyncio
+    max_retries = 10
+    for attempt in range(1, max_retries + 1):
+        try:
+            async with engine.begin() as conn:
+                await conn.run_sync(Base.metadata.create_all)
+            return
+        except Exception as e:
+            if attempt == max_retries:
+                raise e
+            await asyncio.sleep(2)

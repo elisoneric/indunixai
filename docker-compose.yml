@@ -10,12 +10,12 @@ services:
       - "8000"
     labels:
       - "traefik.enable=true"
+      - "traefik.docker.network=coolify"
       - "traefik.http.routers.backend.rule=Host(`api.indunixai.com`)"
-      - "traefik.http.routers.backend.entrypoints=https"
+      - "traefik.http.routers.backend.entrypoints=websecure,https"
+      - "traefik.http.routers.backend.tls=true"
       - "traefik.http.routers.backend.tls.certresolver=letsencrypt"
       - "traefik.http.services.backend.loadbalancer.server.port=8000"
-      - "traefik.http.middlewares.backend-buffering.buffering.maxResponseBodyBytes=0"
-      - "traefik.http.routers.backend.middlewares=backend-buffering"
     env_file:
       - .env
     environment:
@@ -48,6 +48,7 @@ services:
         condition: service_started
     networks:
       - indunix-network
+      - coolify
 
   # Indunix Dark Glassmorphic Marketing & Developer Console Web App
   frontend:
@@ -60,14 +61,17 @@ services:
       - "80"
     labels:
       - "traefik.enable=true"
+      - "traefik.docker.network=coolify"
       - "traefik.http.routers.frontend.rule=Host(`indunixai.com`) || Host(`www.indunixai.com`) || Host(`docs.indunixai.com`) || Host(`console.indunixai.com`)"
-      - "traefik.http.routers.frontend.entrypoints=https"
+      - "traefik.http.routers.frontend.entrypoints=websecure,https"
+      - "traefik.http.routers.frontend.tls=true"
       - "traefik.http.routers.frontend.tls.certresolver=letsencrypt"
       - "traefik.http.services.frontend.loadbalancer.server.port=80"
     depends_on:
       - backend
     networks:
       - indunix-network
+      - coolify
 
   # PostgreSQL Ledger & Database (Internal only - no host port collision)
   postgres:
@@ -109,3 +113,5 @@ volumes:
 networks:
   indunix-network:
     driver: bridge
+  coolify:
+    external: true
