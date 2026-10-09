@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # Indunix High-Speed Sovereign Gateway & API Server
   backend:
@@ -8,8 +6,8 @@ services:
       dockerfile: backend/Dockerfile
     container_name: indunix-backend
     restart: always
-    ports:
-      - "8000:8000"
+    expose:
+      - "8000"
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.backend.rule=Host(`api.indunixai.com`)"
@@ -34,8 +32,10 @@ services:
       - MOCK_UPSTREAM_IF_UNSET=${MOCK_UPSTREAM_IF_UNSET:-false}
       - ENTERPRISE_LEASE_SIGNING_KEY=${ENTERPRISE_LEASE_SIGNING_KEY:-indunix-edge-ent-master-sig-key-2026}
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
     networks:
       - indunix-network
 
@@ -46,8 +46,8 @@ services:
       dockerfile: Dockerfile
     container_name: indunix-frontend
     restart: always
-    ports:
-      - "5173:80"
+    expose:
+      - "80"
     labels:
       - "traefik.enable=true"
       - "traefik.http.routers.frontend.rule=Host(`indunixai.com`) || Host(`www.indunixai.com`) || Host(`docs.indunixai.com`) || Host(`console.indunixai.com`)"
@@ -59,7 +59,7 @@ services:
     networks:
       - indunix-network
 
-  # PostgreSQL Ledger & Database
+  # PostgreSQL Ledger & Database (Internal only - no host port collision)
   postgres:
     image: postgres:16-alpine
     container_name: indunix-postgres
@@ -68,20 +68,25 @@ services:
       - POSTGRES_USER=${POSTGRES_USER:-indunix_user}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-indunix_secure_pass_2026}
       - POSTGRES_DB=${POSTGRES_DB:-indunix_db}
-    ports:
-      - "5432:5432"
+    expose:
+      - "5432"
     volumes:
       - indunix_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-indunix_user} -d ${POSTGRES_DB:-indunix_db}"]
+      interval: 3s
+      timeout: 3s
+      retries: 5
     networks:
       - indunix-network
 
-  # Redis Token Bucket & Cache
+  # Redis Token Bucket & Cache (Internal only - no host port collision)
   redis:
     image: redis:7-alpine
     container_name: indunix-redis
     restart: always
-    ports:
-      - "6379:6379"
+    expose:
+      - "6379"
     volumes:
       - indunix_redis_data:/data
     networks:
