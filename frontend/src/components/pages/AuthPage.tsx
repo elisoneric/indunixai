@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Eye, EyeOff } from 'lucide-react';
 import { api } from '../../api/client';
 import { IndunixLogo } from '../common/IndunixLogo';
@@ -28,7 +28,19 @@ export const AuthPage: React.FC<AuthPageProps> = ({
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [googleClientId, setGoogleClientId] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
+
+  // Discover Google Client ID from backend or env
+  useEffect(() => {
+    let active = true;
+    api.getAuthConfig().then((cfg) => {
+      if (!active) return;
+      const cid = cfg.google_client_id || (import.meta as any).env.VITE_GOOGLE_CLIENT_ID || '';
+      setGoogleClientId(cid);
+    }).catch(() => {});
+    return () => { active = false; };
+  }, []);
 
   const handleModeChange = (newMode: 'login' | 'register') => {
     setMode(newMode);
@@ -62,12 +74,57 @@ export const AuthPage: React.FC<AuthPageProps> = ({
   };
 
   const handleGoogleSignIn = async () => {
-    setGoogleLoading(true);
     setError(null);
+    const cid = googleClientId || (import.meta as any).env.VITE_GOOGLE_CLIENT_ID;
 
+    // 1. If Google Client ID and Google OAuth2 are loaded, open Google native popup
+    if (cid && (window as any).google?.accounts?.oauth2) {
+      setGoogleLoading(true);
+      try {
+        const client = (window as any).google.accounts.oauth2.initTokenClient({
+          client_id: cid,
+          scope: 'email profile openid',
+          callback: async (tokenResponse: any) => {
+            if (tokenResponse.error) {
+              setGoogleLoading(false);
+              setError(tokenResponse.error_description || 'Google sign-in was cancelled or failed.');
+              return;
+            }
+            try {
+              // Fetch Google user profile
+              const userRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+                headers: { Authorization: `Bearer ${tokenResponse.access_token}` }
+              });
+              if (!userRes.ok) throw new Error('Unable to fetch Google user profile.');
+              const gProfile = await userRes.json();
+              await api.googleAuth({
+                email: gProfile.email,
+                full_name: gProfile.name,
+                google_id: gProfile.sub,
+              });
+              onSuccess();
+            } catch (authErr: any) {
+              setError(authErr.message || 'Failed to complete Google authentication.');
+            } finally {
+              setGoogleLoading(false);
+            }
+          },
+        });
+        client.requestAccessToken({ prompt: 'consent' });
+      } catch (err: any) {
+        setGoogleLoading(false);
+        setError('Error initializing Google login: ' + (err.message || String(err)));
+      }
+      return;
+    }
+
+    // 2. If Google Client ID is not yet configured, provide seamless developer fallback
+    setGoogleLoading(true);
     try {
-      // Check if user already provided an email in input or use Google standard prompt
-      const targetEmail = email.trim() || prompt("Enter your Google Account email to continue with Google:", "developer@indunixai.com");
+      const targetEmail = email.trim() || prompt(
+        "Google Client ID is not configured yet in Coolify/environment.\nEnter your Google email to test account creation & ₦1,000 credit grant:",
+        "developer@indunixai.com"
+      );
       if (!targetEmail) {
         setGoogleLoading(false);
         return;

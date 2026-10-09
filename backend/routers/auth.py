@@ -13,6 +13,16 @@ from backend.services.email_service import email_service
 
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 
+@router.get("/config")
+async def get_auth_public_config():
+    """
+    Returns public client configuration for social login (Google OAuth).
+    """
+    from backend.core.config import settings
+    return {
+        "google_client_id": settings.GOOGLE_CLIENT_ID or ""
+    }
+
 @router.post("/register", response_model=Token, status_code=status.HTTP_201_CREATED)
 async def register(payload: UserRegister, db: AsyncSession = Depends(get_db)):
     # Check if user already exists

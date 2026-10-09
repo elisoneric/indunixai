@@ -129,7 +129,7 @@ export const api = {
     return result;
   },
 
-  async googleAuth(data: { credential?: string; email?: string; full_name?: string }) {
+  async googleAuth(data: { credential?: string; email?: string; full_name?: string; google_id?: string }) {
     const res = await fetch(`${API_BASE}/api/auth/google`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -143,6 +143,18 @@ export const api = {
     localStorage.setItem('indunix_token', result.access_token);
     localStorage.setItem('indunix_user', JSON.stringify(result.user));
     return result;
+  },
+
+  async getAuthConfig(): Promise<{ google_client_id: string }> {
+    try {
+      const res = await fetch(`${API_BASE}/api/auth/config`);
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch {
+      // fallback
+    }
+    return { google_client_id: '' };
   },
 
   async getMe(): Promise<User> {
