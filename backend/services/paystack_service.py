@@ -4,6 +4,7 @@ import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from backend.core.config import settings
+from backend.models.user import User
 from backend.models.wallet import Wallet, Transaction, TransactionStatus, TransactionChannel
 
 class PaystackService:
@@ -140,6 +141,24 @@ class PaystackService:
         wallet.balance_ngn = round(current_balance + amount_ngn, 2)
 
         await db.commit()
+
+        # Dispatch automated payment receipt email
+        try:
+            user_res = await db.execute(select(User).where(User.id == wallet.user_id))
+            user = user_res.scalar_one_or_none()
+            if user:
+                from backend.services.email_service import email_service
+                email_service.send_payment_receipt_email(
+                    to_email=user.email,
+                    full_name=user.full_name,
+                    amount_ngn=amount_ngn,
+                    reference=reference,
+                    new_balance_ngn=float(wallet.balance_ngn),
+                    channel=channel or "CARD"
+                )
+        except Exception:
+            pass
+
         return True, "Wallet credited successfully"
 
 paystack_service = PaystackService()

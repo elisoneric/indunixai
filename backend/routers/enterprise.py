@@ -43,6 +43,16 @@ async def submit_enterprise_inquiry(
         f"Type: {new_inquiry.deployment_type}. Action: Schedule callback within 24h."
     )
 
+    from backend.services.email_service import email_service
+    email_service.send_enterprise_inquiry_receipt(
+        lead_email=new_inquiry.email,
+        full_name=new_inquiry.full_name,
+        company_name=new_inquiry.company_name,
+        deployment_type=new_inquiry.deployment_type,
+        phone=new_inquiry.phone,
+        estimated_volume=new_inquiry.estimated_volume or ""
+    )
+
     return {
         "status": "success",
         "inquiry_id": new_inquiry.id,

@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from backend.core.database import get_db
@@ -9,6 +9,7 @@ from backend.core.deps import get_current_user
 from backend.models.user import User, UserRole
 from backend.models.wallet import Wallet, Transaction, TransactionChannel, TransactionStatus
 from backend.schemas.auth import UserRegister, UserLogin, UserOut, Token
+from backend.services.email_service import email_service
 
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 
@@ -47,7 +48,7 @@ async def register(payload: UserRegister, db: AsyncSession = Depends(get_db)):
     # Log welcome promo transaction
     promo_tx = Transaction(
         wallet_id=wallet.id,
-        reference=f"axion_promo_{uuid.uuid4().hex[:10]}",
+        reference=f"indunix_promo_{uuid.uuid4().hex[:10]}",
         amount_ngn=1000.00,
         channel=TransactionChannel.PROMO_CREDIT.value,
         status=TransactionStatus.SUCCESS,
@@ -57,6 +58,9 @@ async def register(payload: UserRegister, db: AsyncSession = Depends(get_db)):
     await db.commit()
     await db.refresh(new_user)
 
+    # Dispatch welcome email with ₦1,000 credit confirmation
+    email_service.send_welcome_email(to_email=new_user.email, full_name=new_user.full_name)
+
     token = create_access_token(data={"sub": new_user.id, "email": new_user.email})
     return {
         "access_token": token,
@@ -65,7 +69,7 @@ async def register(payload: UserRegister, db: AsyncSession = Depends(get_db)):
     }
 
 @router.post("/login", response_model=Token)
-async def login(payload: UserLogin, db: AsyncSession = Depends(get_db)):
+async def login(payload: UserLogin, request: Request, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User).where(User.email == payload.email.lower()))
     user = result.scalar_one_or_none()
     if not user or not verify_password(payload.password, user.hashed_password):
@@ -79,6 +83,16 @@ async def login(payload: UserLogin, db: AsyncSession = Depends(get_db)):
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Account is inactive."
         )
+
+    # Dispatch login security notice
+    client_ip = request.client.host if request.client else "Unknown"
+    user_agent = request.headers.get("user-agent", "Unknown")
+    email_service.send_login_alert(
+        to_email=user.email,
+        full_name=user.full_name,
+        ip_address=client_ip,
+        user_agent=user_agent
+    )
 
     token = create_access_token(data={"sub": user.id, "email": user.email})
     return {

@@ -11,6 +11,7 @@ import { QuickstartDocs } from './components/landing/QuickstartDocs';
 import { DocsPage } from './components/docs/DocsPage';
 import { PrivacyPage } from './components/pages/PrivacyPage';
 import { TermsPage } from './components/pages/TermsPage';
+import { AuthPage } from './components/pages/AuthPage';
 import { AuthModal } from './components/auth/AuthModal';
 import { BillingModal } from './components/modals/BillingModal';
 import { DeveloperDocsModal } from './components/modals/DeveloperDocsModal';
@@ -19,7 +20,7 @@ import { EnterpriseContactModal } from './components/modals/EnterpriseContactMod
 import { ConsoleLayout } from './components/console/ConsoleLayout';
 
 export function App() {
-  const [currentPage, setCurrentPage] = useState<'landing' | 'console' | 'docs' | 'privacy' | 'terms'>('landing');
+  const [currentPage, setCurrentPage] = useState<'landing' | 'console' | 'docs' | 'privacy' | 'terms' | 'auth'>('landing');
   const [user, setUser] = useState<User | null>(null);
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [summary, setSummary] = useState<UsageSummary | null>(null);
@@ -27,7 +28,7 @@ export function App() {
   const [transactions, setTransactions] = useState<TransactionItem[]>([]);
   const [logs, setLogs] = useState<UsageLogItem[]>([]);
 
-  // Modals
+  // Modals & Pages
   const [isAuthOpen, setIsAuthOpen] = useState<boolean>(false);
   const [authMode, setAuthMode] = useState<'login' | 'register'>('register');
   const [isDepositOpen, setIsDepositOpen] = useState<boolean>(false);
@@ -52,6 +53,12 @@ export function App() {
         setCurrentPage('privacy');
       } else if (hash === '#terms' || path === '/terms') {
         setCurrentPage('terms');
+      } else if (hash === '#login' || path === '/login') {
+        setAuthMode('login');
+        setCurrentPage('auth');
+      } else if (hash === '#register' || path === '/register' || hash === '#signup') {
+        setAuthMode('register');
+        setCurrentPage('auth');
       }
     };
 
@@ -60,7 +67,7 @@ export function App() {
     return () => window.removeEventListener('hashchange', handleHash);
   }, []);
 
-  const handleNavigate = (page: 'landing' | 'console' | 'docs' | 'privacy' | 'terms') => {
+  const handleNavigate = (page: 'landing' | 'console' | 'docs' | 'privacy' | 'terms' | 'auth') => {
     if (page === 'console' && !user) {
       handleOpenAuth('login');
       return;
@@ -78,8 +85,11 @@ export function App() {
     } else if (page === 'terms') {
       window.location.hash = 'terms';
       window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else if (page === 'auth') {
+      window.location.hash = authMode;
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     } else {
-      if (['#docs', '#console', '#privacy', '#terms'].includes(window.location.hash)) {
+      if (['#docs', '#console', '#privacy', '#terms', '#login', '#register', '#signup'].includes(window.location.hash)) {
         history.pushState("", document.title, window.location.pathname + window.location.search);
       }
       window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -116,7 +126,9 @@ export function App() {
 
   const handleOpenAuth = (mode: 'login' | 'register') => {
     setAuthMode(mode);
-    setIsAuthOpen(true);
+    setCurrentPage('auth');
+    window.location.hash = `#${mode}`;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleOpenDocsModal = (tab?: 'openai' | 'cursor' | 'frameworks' | 'security') => {
@@ -298,6 +310,19 @@ export function App() {
             onNavigateTerms={() => handleNavigate('terms')}
           />
         </div>
+      ) : currentPage === 'auth' ? (
+        /* Dedicated Full-Page Auth Experience (/login & /register) */
+        <AuthPage
+          initialMode={authMode}
+          onSuccess={() => {
+            refreshUserData();
+            handleNavigate('console');
+          }}
+          onNavigateHome={() => handleNavigate('landing')}
+          onSwitchMode={(mode) => setAuthMode(mode)}
+          onOpenPrivacy={() => handleNavigate('privacy')}
+          onOpenTerms={() => handleNavigate('terms')}
+        />
       ) : (
         /* Public Landing Page View */
         <div className="flex flex-col min-h-screen">

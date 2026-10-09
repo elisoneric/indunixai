@@ -36,6 +36,15 @@ async def create_key(payload: ApiKeyCreate, user: User = Depends(get_current_use
     await db.commit()
     await db.refresh(new_key)
 
+    # Dispatch security alert email
+    from backend.services.email_service import email_service
+    email_service.send_api_key_alert(
+        to_email=user.email,
+        full_name=user.full_name,
+        key_name=new_key.name,
+        key_prefix=new_key.key_prefix
+    )
+
     return ApiKeyCreatedOut(
         api_key=ApiKeyOut.model_validate(new_key),
         secret_key=full_secret,

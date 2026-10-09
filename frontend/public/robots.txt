@@ -1,0 +1,8 @@
+# Indunix AI Search Engine Directives
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /health
+
+# Sitemaps
+Sitemap: https://indunixai.com/sitemap.xml

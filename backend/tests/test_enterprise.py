@@ -29,11 +29,13 @@ async def test_enterprise_inquiry_and_telemetry():
         assert "inquiry_id" in inquiry_data
 
         # 2. Insert test enterprise contract directly into DB
+        import uuid
+        test_license_key = f"INDUNIX-TEST-CORP-{uuid.uuid4().hex[:8]}"
         async with AsyncSessionLocal() as session:
             test_contract = EnterpriseContract(
                 organization_name="Apex Sovereign Banking Ltd",
                 contact_email="danladi@apexbank.ng",
-                license_key="INDUNIX-TEST-CORP-KEY-2026",
+                license_key=test_license_key,
                 contract_status=ContractStatus.ACTIVE,
                 fixed_monthly_retainer_ngn=15000000.0,
                 monthly_included_tokens=500000000,
@@ -47,7 +49,7 @@ async def test_enterprise_inquiry_and_telemetry():
         hb_res = await client.post(
             "/v1/enterprise/heartbeat",
             json={
-                "license_key": "INDUNIX-TEST-CORP-KEY-2026",
+                "license_key": test_license_key,
                 "machine_fingerprint": "AMD-EPYC-9654-SERVER-NODE-01",
                 "uptime_hours": 320.5
             }

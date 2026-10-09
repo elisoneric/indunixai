@@ -1,5 +1,6 @@
 import React from 'react';
 import { Cpu, ExternalLink, Headphones, ShieldCheck, Terminal, BookOpen, CreditCard, Lock, Server, FileText } from 'lucide-react';
+import { IndunixLogo } from '../common/IndunixLogo';
 
 interface FooterProps {
   onOpenDocs?: (tab?: 'openai' | 'cursor' | 'frameworks' | 'security') => void;
@@ -44,14 +45,7 @@ export const Footer: React.FC<FooterProps> = ({
           {/* Brand info */}
           <div className="md:col-span-1 space-y-4">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-lg bg-white/[0.06] border border-white/[0.12] flex items-center justify-center">
-                <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4 text-white">
-                  <path d="M4 4L12 20L20 4L12 8L4 4Z" fill="currentColor" opacity="0.9" />
-                </svg>
-              </div>
-              <span className="font-sans font-bold text-xl text-white tracking-tight">
-                INDUNIX<span className="text-zinc-500 font-normal">.AI</span>
-              </span>
+              <IndunixLogo size={32} showText textSize="text-xl" />
             </div>
             <p className="text-xs leading-relaxed text-zinc-400">
               Sovereign high-speed AI infrastructure purpose-built for modern enterprises, agencies, and builders. Direct Naira settlements with zero FX barrier.

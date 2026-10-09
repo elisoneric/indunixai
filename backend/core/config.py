@@ -40,6 +40,17 @@ class Settings(BaseSettings):
     # Enterprise On-premise Telemetry Master Signing Key
     ENTERPRISE_LEASE_SIGNING_KEY: str = Field(default="indunix-edge-ent-master-sig-key-2026", validation_alias="ENTERPRISE_LEASE_SIGNING_KEY")
     
+    # SMTP Email Configuration (cPanel / Roundcube Webmail compatible)
+    SMTP_HOST: Optional[str] = Field(default=None, validation_alias="SMTP_HOST")
+    SMTP_PORT: int = Field(default=465, validation_alias="SMTP_PORT")
+    SMTP_USER: Optional[str] = Field(default=None, validation_alias="SMTP_USER")
+    SMTP_PASSWORD: Optional[str] = Field(default=None, validation_alias="SMTP_PASSWORD")
+    SMTP_FROM_EMAIL: str = Field(default="notifications@indunixai.com", validation_alias="SMTP_FROM_EMAIL")
+    SMTP_FROM_NAME: str = Field(default="Indunix AI", validation_alias="SMTP_FROM_NAME")
+    SMTP_USE_SSL: bool = Field(default=True, validation_alias="SMTP_USE_SSL")
+    SMTP_USE_TLS: bool = Field(default=False, validation_alias="SMTP_USE_TLS")
+    ADMIN_NOTIFICATION_EMAIL: str = Field(default="system@indunixai.com", validation_alias="ADMIN_NOTIFICATION_EMAIL")
+    
     # Rate Card in NGN (Cost per 1,000,000 tokens)
     RATE_CARD_NGN: dict = {
         "indunix-1-spark": {

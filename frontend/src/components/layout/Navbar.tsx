@@ -1,6 +1,7 @@
 import React from 'react';
 import { Terminal, Zap, BookOpen, HelpCircle, ArrowRight } from 'lucide-react';
 import { formatNaira } from '../../utils/formatters';
+import { IndunixLogo } from '../common/IndunixLogo';
 
 interface NavbarProps {
   user: any;
@@ -31,21 +32,10 @@ export const Navbar: React.FC<NavbarProps> = ({
           onClick={() => onNavigate('landing')}
           className="flex items-center gap-3 cursor-pointer group shrink-0 select-none"
         >
-          {/* Minimalist Geometric Icon */}
-          <div className="w-7 h-7 rounded-lg bg-white/[0.06] border border-white/[0.12] flex items-center justify-center group-hover:border-white/30 transition-all">
-            <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4 text-white">
-              <path d="M4 4L12 20L20 4L12 8L4 4Z" fill="currentColor" opacity="0.9" />
-            </svg>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <span className="font-sans font-bold text-lg tracking-tight text-white group-hover:text-zinc-200 transition-colors">
-              INDUNIX<span className="text-zinc-500 font-normal">.AI</span>
-            </span>
-            <div className="hidden sm:flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-white/[0.04] border border-white/[0.08] text-[10px] font-mono text-zinc-400">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-              <span>Direct Naira Live</span>
-            </div>
+          <IndunixLogo size={32} showText textSize="text-lg" />
+          <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/[0.04] border border-white/[0.08] text-[10px] font-mono text-zinc-400">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            <span>Direct Naira Live</span>
           </div>
         </div>
 
