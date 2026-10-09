@@ -38,33 +38,56 @@ export function App() {
   const [isSalesContactOpen, setIsSalesContactOpen] = useState<boolean>(false);
   const [selectedModelId, setSelectedModelId] = useState<string>('indunix-1-core');
 
-  // Handle URL hash and route state
+  // Handle URL paths, subdomains, and route state
   useEffect(() => {
-    const handleHash = () => {
+    const handleRoute = () => {
       const hash = window.location.hash.toLowerCase();
       const path = window.location.pathname.toLowerCase();
       const host = window.location.hostname.toLowerCase();
 
-      if (host.startsWith('docs.') || hash === '#docs' || hash.startsWith('#docs/') || path === '/docs') {
+      // Automatically strip legacy hash #console or #docs in favor of clean URLs
+      if (hash === '#console' || hash === '#/console') {
+        window.history.replaceState(null, '', '/console');
+      } else if (hash === '#docs' || hash.startsWith('#docs/') || hash.startsWith('#/docs')) {
+        window.history.replaceState(null, '', '/docs');
+      } else if (hash === '#privacy') {
+        window.history.replaceState(null, '', '/privacy');
+      } else if (hash === '#terms') {
+        window.history.replaceState(null, '', '/terms');
+      } else if (hash === '#login') {
+        window.history.replaceState(null, '', '/login');
+      } else if (hash === '#register' || hash === '#signup') {
+        window.history.replaceState(null, '', '/register');
+      }
+
+      const activePath = window.location.pathname.toLowerCase();
+
+      if (host.startsWith('docs.') || activePath === '/docs' || hash === '#docs') {
         setCurrentPage('docs');
-      } else if (host.startsWith('console.') || host.startsWith('app.') || hash === '#console' || path === '/console') {
+      } else if (host.startsWith('console.') || host.startsWith('app.') || activePath === '/console' || hash === '#console') {
         setCurrentPage('console');
-      } else if (hash === '#privacy' || path === '/privacy') {
+      } else if (activePath === '/privacy' || hash === '#privacy') {
         setCurrentPage('privacy');
-      } else if (hash === '#terms' || path === '/terms') {
+      } else if (activePath === '/terms' || hash === '#terms') {
         setCurrentPage('terms');
-      } else if (hash === '#login' || path === '/login') {
+      } else if (activePath === '/login' || hash === '#login') {
         setAuthMode('login');
         setCurrentPage('auth');
-      } else if (hash === '#register' || path === '/register' || hash === '#signup') {
+      } else if (activePath === '/register' || activePath === '/signup' || hash === '#register' || hash === '#signup') {
         setAuthMode('register');
         setCurrentPage('auth');
+      } else {
+        setCurrentPage('landing');
       }
     };
 
-    handleHash();
-    window.addEventListener('hashchange', handleHash);
-    return () => window.removeEventListener('hashchange', handleHash);
+    handleRoute();
+    window.addEventListener('popstate', handleRoute);
+    window.addEventListener('hashchange', handleRoute);
+    return () => {
+      window.removeEventListener('popstate', handleRoute);
+      window.removeEventListener('hashchange', handleRoute);
+    };
   }, []);
 
   const handleNavigate = (page: 'landing' | 'console' | 'docs' | 'privacy' | 'terms' | 'auth') => {
@@ -74,27 +97,32 @@ export function App() {
     }
     
     setCurrentPage(page);
+    const host = window.location.hostname.toLowerCase();
+
     if (page === 'docs') {
-      window.location.hash = 'docs';
+      if (!host.startsWith('docs.')) {
+        window.history.pushState(null, '', '/docs');
+      }
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } else if (page === 'console') {
-      window.location.hash = 'console';
+      if (!host.startsWith('console.') && !host.startsWith('app.')) {
+        window.history.pushState(null, '', '/console');
+      }
     } else if (page === 'privacy') {
-      window.location.hash = 'privacy';
+      window.history.pushState(null, '', '/privacy');
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } else if (page === 'terms') {
-      window.location.hash = 'terms';
+      window.history.pushState(null, '', '/terms');
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } else if (page === 'auth') {
-      window.location.hash = authMode;
+      window.history.pushState(null, '', `/${authMode}`);
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } else {
-      if (['#docs', '#console', '#privacy', '#terms', '#login', '#register', '#signup'].includes(window.location.hash)) {
-        history.pushState("", document.title, window.location.pathname + window.location.search);
-      }
+      window.history.pushState(null, '', '/');
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
+
 
   // Load user data on startup
   const refreshUserData = async () => {
@@ -174,6 +202,7 @@ export function App() {
           onRefreshData={refreshUserData}
           onLogout={handleLogout}
           onNavigateHome={() => handleNavigate('landing')}
+          onUserUpdated={(updated) => setUser(updated)}
         />
       ) : currentPage === 'docs' ? (
         /* Dedicated Full Documentation Page View (/docs) */
@@ -418,6 +447,7 @@ export function App() {
         onSuccess={() => {
           refreshUserData();
         }}
+        user={user}
       />
 
       {/* Developer Docs & SDK Integration Modal */}

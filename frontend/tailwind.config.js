@@ -25,7 +25,8 @@ export default {
       },
       fontFamily: {
         sans: ['Inter', 'Outfit', 'system-ui', 'sans-serif'],
-        mono: ['Fira Code', 'JetBrains Mono', 'monospace'],
+        mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'monospace'],
+        numeric: ['Inter', 'system-ui', 'sans-serif'],
       },
       boxShadow: {
         'glow-emerald': '0 0 25px -5px rgba(16, 185, 129, 0.25)',

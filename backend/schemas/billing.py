@@ -13,6 +13,7 @@ class DepositResponse(BaseModel):
     access_code: str
     reference: str
     amount_ngn: float
+    public_key: Optional[str] = None
 
 class PaystackWebhookPayload(BaseModel):
     event: str

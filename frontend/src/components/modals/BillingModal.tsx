@@ -1,28 +1,101 @@
-import React, { useState } from 'react';
-import { X, CreditCard, Building, Smartphone, CheckCircle, ArrowRight, ShieldCheck, Zap, ExternalLink, RefreshCw } from 'lucide-react';
-import { api } from '../../api/client';
+import React, { useState, useEffect } from 'react';
+import {
+  X,
+  CreditCard,
+  Building,
+  CheckCircle,
+  ArrowRight,
+  ShieldCheck,
+  ExternalLink,
+  RefreshCw,
+  Copy,
+  Check,
+  AlertCircle
+} from 'lucide-react';
+import { api, User } from '../../api/client';
 import { formatNaira } from '../../utils/formatters';
 
 interface BillingModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: () => void;
+  user?: User | null;
 }
 
-export const BillingModal: React.FC<BillingModalProps> = ({ isOpen, onClose, onSuccess }) => {
+export const BillingModal: React.FC<BillingModalProps> = ({
+  isOpen,
+  onClose,
+  onSuccess,
+  user
+}) => {
+  const [activeTab, setActiveTab] = useState<'checkout' | 'virtual_account'>('checkout');
   const [amount, setAmount] = useState<number>(5000);
-  const [channel, setChannel] = useState<string>('CARD');
   const [loading, setLoading] = useState<boolean>(false);
   const [verifying, setVerifying] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const [pendingTx, setPendingTx] = useState<{ reference: string; authorization_url: string; amount_ngn: number } | null>(null);
+  const [copiedAccount, setCopiedAccount] = useState<boolean>(false);
+
+  // Dedicated Virtual Account state
+  const [virtualAccount, setVirtualAccount] = useState<{
+    bank_name: string;
+    account_number: string;
+    account_name: string;
+    currency: string;
+    notice?: string;
+  } | null>(null);
+  const [loadingVirtual, setLoadingVirtual] = useState<boolean>(false);
+
+  // Transaction verification & confirmation state
+  const [pendingTx, setPendingTx] = useState<{
+    reference: string;
+    authorization_url: string;
+    amount_ngn: number;
+    public_key?: string;
+  } | null>(null);
   const [successInfo, setSuccessInfo] = useState<{ amount: number; reference: string } | null>(null);
 
-  if (!isOpen) return null;
-
+  // Preset amounts
   const presetAmounts = [2500, 5000, 10000, 25000, 50000];
 
-  const handleInitialize = async () => {
+  // Dynamically load Paystack Inline JS script
+  useEffect(() => {
+    if (!document.getElementById('paystack-inline-js')) {
+      const script = document.createElement('script');
+      script.id = 'paystack-inline-js';
+      script.src = 'https://js.paystack.co/v1/inline.js';
+      script.async = true;
+      document.body.appendChild(script);
+    }
+  }, []);
+
+  // Fetch virtual account when switching to Virtual Account tab
+  useEffect(() => {
+    if (isOpen && activeTab === 'virtual_account' && !virtualAccount) {
+      loadVirtualAccount();
+    }
+  }, [isOpen, activeTab]);
+
+  const loadVirtualAccount = async () => {
+    setLoadingVirtual(true);
+    setError(null);
+    try {
+      const data = await api.getVirtualAccount();
+      setVirtualAccount(data);
+    } catch (err: any) {
+      setError(err.message || 'Unable to fetch dedicated virtual account');
+    } finally {
+      setLoadingVirtual(false);
+    }
+  };
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedAccount(true);
+    setTimeout(() => setCopiedAccount(false), 2000);
+  };
+
+  // Launch Paystack Inline Popup or Fallback
+  const handlePaystackCheckout = async () => {
     if (amount < 1000) {
       setError('Minimum deposit is ₦1,000.00');
       return;
@@ -31,54 +104,69 @@ export const BillingModal: React.FC<BillingModalProps> = ({ isOpen, onClose, onS
     setError(null);
 
     try {
-      const initRes = await api.initializeDeposit(amount, channel);
+      const initRes = await api.initializeDeposit(amount, 'CARD');
       setPendingTx(initRes);
 
-      // Open checkout in popup or new tab if valid checkout URL
-      if (initRes.authorization_url) {
-        window.open(initRes.authorization_url, '_blank');
+      const paystackPop = (window as any).PaystackPop;
+      const userEmail = user?.email || 'developer@indunixai.com';
+      const userFullName = user?.full_name || 'Indunix Developer';
+
+      // Check if Paystack Inline popup object is available and public key exists
+      if (paystackPop && initRes.public_key && (initRes.public_key.startsWith('pk_live_') || initRes.public_key.startsWith('pk_test_'))) {
+        const handler = paystackPop.setup({
+          key: initRes.public_key,
+          email: userEmail,
+          amount: Math.round(amount * 100), // in kobo
+          ref: initRes.reference,
+          currency: 'NGN',
+          firstname: userFullName.split(' ')[0] || 'Developer',
+          lastname: userFullName.split(' ').slice(1).join(' ') || 'Account',
+          callback: function (response: any) {
+            handleVerifyPayment(response.reference || initRes.reference, amount);
+          },
+          onClose: function () {
+            setLoading(false);
+          },
+        });
+        handler.openIframe();
+        setLoading(false);
+      } else {
+        // Fallback: Open Paystack standard secure checkout window
+        if (initRes.authorization_url) {
+          window.open(initRes.authorization_url, '_blank');
+        }
+        setLoading(false);
       }
     } catch (err: any) {
-      setError(err.message || 'Deposit initialization failed');
-    } finally {
+      setError(err.message || 'Payment initialization failed');
       setLoading(false);
     }
   };
 
-  const handleVerify = async () => {
-    if (!pendingTx) return;
+  // Strictly verify transaction with Paystack API
+  const handleVerifyPayment = async (reference: string, expectedAmount: number) => {
     setVerifying(true);
     setError(null);
-
     try {
-      const res = await api.verifyTransaction(pendingTx.reference);
+      const res = await api.verifyTransaction(reference);
       if (res.status === 'success') {
         setSuccessInfo({
-          amount: pendingTx.amount_ngn,
-          reference: pendingTx.reference,
+          amount: res.amount_ngn || expectedAmount,
+          reference: reference,
         });
         setPendingTx(null);
         onSuccess();
       } else {
-        // If not yet confirmed by webhook/gateway, offer direct confirmation
-        const demoRes = await api.verifyDemoDeposit(pendingTx.reference);
-        if (demoRes.status === 'success') {
-          setSuccessInfo({
-            amount: pendingTx.amount_ngn,
-            reference: pendingTx.reference,
-          });
-          setPendingTx(null);
-          onSuccess();
-        } else {
-          setError('Payment confirmation is still pending with your bank. Please wait a few moments.');
-        }
+        setError(res.error || 'Payment confirmation has not yet been received from Paystack. Please wait a moment.');
       }
     } catch (err: any) {
-      setError(err.message || 'Verification check failed');
+      setError(err.message || 'Transaction verification error. Please retry in a few seconds.');
     } finally {
       setVerifying(false);
     }
   };
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn">
@@ -99,11 +187,14 @@ export const BillingModal: React.FC<BillingModalProps> = ({ isOpen, onClose, onS
               Naira Deposit Confirmed!
             </h3>
             <p className="text-sm text-slate-300">
-              Successfully credited <span className="font-bold text-emerald-400">{formatNaira(successInfo.amount)}</span> to your Indunix wallet.
+              Successfully credited <span className="font-bold text-emerald-400 clean-nums">{formatNaira(successInfo.amount)}</span> to your Indunix wallet.
             </p>
-            <div className="p-3 rounded-xl bg-slate-950 text-xs font-mono text-slate-400 border border-slate-800">
+            <div className="p-3 rounded-xl bg-slate-950 text-xs font-mono text-slate-400 border border-slate-800 clean-nums">
               Reference: {successInfo.reference}
             </div>
+            <p className="text-[11px] text-slate-500">
+              An official transaction receipt has been dispatched to {user?.email || 'your email'}.
+            </p>
             <button
               onClick={() => {
                 setSuccessInfo(null);
@@ -122,31 +213,32 @@ export const BillingModal: React.FC<BillingModalProps> = ({ isOpen, onClose, onS
 
             <div>
               <h3 className="font-heading text-xl font-bold text-white">
-                Complete Payment for {formatNaira(pendingTx.amount_ngn)}
+                Verifying {formatNaira(pendingTx.amount_ngn)}
               </h3>
               <p className="text-xs text-slate-400 mt-1">
-                A secure checkout session has been initialized. Complete the payment in the opened tab or click below to proceed.
+                Complete payment in the Paystack modal or window, then confirm below.
               </p>
             </div>
 
-            <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 text-xs font-mono text-left space-y-1.5">
+            <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 text-xs text-left space-y-2 clean-nums">
               <div className="flex justify-between">
-                <span className="text-slate-500">Amount Due:</span>
+                <span className="text-slate-400">Amount Due:</span>
                 <span className="text-white font-bold">{formatNaira(pendingTx.amount_ngn)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-500">Transaction Reference:</span>
-                <span className="text-emerald-400">{pendingTx.reference}</span>
+                <span className="text-slate-400">Transaction Reference:</span>
+                <span className="text-emerald-400 font-mono text-[11px]">{pendingTx.reference}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-500">Gateway Status:</span>
-                <span className="text-yellow-400">Awaiting Settlement</span>
+                <span className="text-slate-400">Gateway Status:</span>
+                <span className="text-amber-400 font-semibold">Awaiting Bank Confirmation</span>
               </div>
             </div>
 
             {error && (
-              <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-300 text-xs text-left">
-                {error}
+              <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-300 text-xs text-left flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                <span>{error}</span>
               </div>
             )}
 
@@ -157,19 +249,19 @@ export const BillingModal: React.FC<BillingModalProps> = ({ isOpen, onClose, onS
                 rel="noopener noreferrer"
                 className="w-full py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-semibold text-xs transition-all flex items-center justify-center gap-2 border border-slate-700"
               >
-                <span>Re-open Checkout Window</span>
+                <span>Re-open Paystack Checkout</span>
                 <ExternalLink className="w-3.5 h-3.5" />
               </a>
 
               <button
-                onClick={handleVerify}
+                onClick={() => handleVerifyPayment(pendingTx.reference, pendingTx.amount_ngn)}
                 disabled={verifying}
                 className="w-full py-3 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-sm transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/25 disabled:opacity-50"
               >
                 {verifying ? (
                   <>
                     <RefreshCw className="w-4 h-4 animate-spin" />
-                    <span>Verifying with Gateway...</span>
+                    <span>Verifying with Paystack...</span>
                   </>
                 ) : (
                   <>
@@ -182,112 +274,174 @@ export const BillingModal: React.FC<BillingModalProps> = ({ isOpen, onClose, onS
           </div>
         ) : (
           <div>
-            <div className="text-center mb-6">
+            {/* Modal Header */}
+            <div className="text-center mb-5">
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-mono mb-2 border border-emerald-500/20">
                 <ShieldCheck className="w-3.5 h-3.5" />
-                <span>Direct Naira Top-Up</span>
+                <span>Native NGN Wallet Top-Up</span>
               </div>
               <h3 className="font-heading text-2xl font-bold text-white">
-                Top Up Naira Wallet
+                Add Funds to Naira Wallet
               </h3>
               <p className="text-xs text-slate-400 mt-1">
-                Prepaid credits never expire. Usable across all Indunix model tiers.
+                Zero FX conversion charges. Automated wallet credits and instant invoice delivery.
               </p>
             </div>
 
+            {/* Deposit Method Tabs */}
+            <div className="flex p-1 bg-slate-950 rounded-xl border border-slate-800 mb-5">
+              <button
+                onClick={() => setActiveTab('checkout')}
+                className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-all ${
+                  activeTab === 'checkout'
+                    ? 'bg-emerald-500 text-slate-950 shadow-md font-bold'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <CreditCard className="w-3.5 h-3.5" />
+                <span>Paystack Instant Checkout</span>
+              </button>
+              <button
+                onClick={() => setActiveTab('virtual_account')}
+                className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-all ${
+                  activeTab === 'virtual_account'
+                    ? 'bg-emerald-500 text-slate-950 shadow-md font-bold'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <Building className="w-3.5 h-3.5" />
+                <span>Dedicated Virtual NUBAN</span>
+              </button>
+            </div>
+
             {error && (
-              <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-300 text-xs">
-                {error}
+              <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-300 text-xs flex items-start gap-2">
+                <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                <span>{error}</span>
               </div>
             )}
 
-            {/* Quick Amount Select */}
-            <div className="mb-6">
-              <label className="block text-xs font-medium text-slate-300 mb-2">
-                Select Amount (NGN)
-              </label>
-              <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 mb-3">
-                {presetAmounts.map((p) => (
-                  <button
-                    key={p}
-                    type="button"
-                    onClick={() => setAmount(p)}
-                    className={`py-2 px-1 text-xs font-mono font-bold rounded-lg border transition-all ${
-                      amount === p
-                        ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300'
-                        : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
-                    }`}
-                  >
-                    ₦{p.toLocaleString()}.00
-                  </button>
-                ))}
-              </div>
+            {/* TAB 1: PAYSTACK INSTANT CHECKOUT */}
+            {activeTab === 'checkout' && (
+              <div className="space-y-5">
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-2">
+                    Select Deposit Amount (NGN)
+                  </label>
+                  <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 mb-3">
+                    {presetAmounts.map((p) => (
+                      <button
+                        key={p}
+                        type="button"
+                        onClick={() => setAmount(p)}
+                        className={`py-2 px-1 text-xs clean-nums font-bold rounded-lg border transition-all ${
+                          amount === p
+                            ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300'
+                            : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-white'
+                        }`}
+                      >
+                        ₦{p.toLocaleString()}.00
+                      </button>
+                    ))}
+                  </div>
 
-              {/* Custom input */}
-              <div className="relative">
-                <span className="absolute left-3 top-2.5 text-sm font-mono text-slate-400">₦</span>
-                <input
-                  type="number"
-                  min="1000"
-                  step="500"
-                  value={amount}
-                  onChange={(e) => setAmount(Number(e.target.value))}
-                  placeholder="Custom amount"
-                  className="w-full pl-8 pr-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm font-mono text-white focus:outline-none focus:border-emerald-500 transition-colors"
-                />
-              </div>
-              <span className="text-[11px] text-slate-500 font-mono mt-1 block">
-                Minimum deposit: ₦1,000.00
-              </span>
-            </div>
+                  <div className="relative">
+                    <span className="absolute left-3 top-2.5 text-sm clean-nums text-slate-400">₦</span>
+                    <input
+                      type="number"
+                      min="1000"
+                      step="500"
+                      value={amount}
+                      onChange={(e) => setAmount(Number(e.target.value))}
+                      placeholder="Custom amount"
+                      className="w-full pl-8 pr-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-sm clean-nums text-white focus:outline-none focus:border-emerald-500 transition-colors"
+                    />
+                  </div>
+                  <span className="text-[11px] text-slate-500 clean-nums mt-1 block">
+                    Minimum deposit: ₦1,000.00
+                  </span>
+                </div>
 
-            {/* Payment Channel */}
-            <div className="mb-6">
-              <label className="block text-xs font-medium text-slate-300 mb-2">
-                Payment Channel
-              </label>
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                {[
-                  { id: 'CARD', label: 'Debit Cards (Mastercard, Visa, Verve)', icon: CreditCard },
-                  { id: 'BANK_TRANSFER', label: 'Direct Bank Transfer', icon: Building },
-                  { id: 'USSD', label: 'USSD Quick Dial', icon: Smartphone },
-                  { id: 'OPAY', label: 'OPay Wallet & Mobile', icon: Zap },
-                ].map((item) => {
-                  const Icon = item.icon;
-                  return (
+                {/* Instant Checkout Button */}
+                <button
+                  onClick={handlePaystackCheckout}
+                  disabled={loading || amount < 1000}
+                  className="w-full py-3 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-sm transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/25 disabled:opacity-50"
+                >
+                  {loading ? (
+                    <span className="animate-spin inline-block w-4 h-4 border-2 border-slate-950 border-t-transparent rounded-full" />
+                  ) : (
+                    <>
+                      <span>Open Paystack Checkout ({formatNaira(amount)})</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </>
+                  )}
+                </button>
+                <p className="text-center text-[11px] text-slate-500">
+                  Supports Nigerian Cards, USSD (*737#, *966# etc), Bank Transfer, and Apple Pay.
+                </p>
+              </div>
+            )}
+
+            {/* TAB 2: DEDICATED VIRTUAL ACCOUNT (BANK TRANSFER) */}
+            {activeTab === 'virtual_account' && (
+              <div className="space-y-4">
+                {loadingVirtual ? (
+                  <div className="py-8 text-center text-slate-400 space-y-2">
+                    <RefreshCw className="w-6 h-6 animate-spin mx-auto text-emerald-400" />
+                    <p className="text-xs">Generating your unique Paystack NUBAN...</p>
+                  </div>
+                ) : virtualAccount ? (
+                  <div className="space-y-4">
+                    <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-3">
+                      <div className="flex items-center justify-between border-b border-slate-850 pb-2">
+                        <span className="text-xs text-slate-400">Assigned Bank</span>
+                        <span className="text-xs font-bold text-white">{virtualAccount.bank_name}</span>
+                      </div>
+
+                      <div className="flex items-center justify-between border-b border-slate-850 pb-2">
+                        <span className="text-xs text-slate-400">Account Number</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-base font-mono font-bold text-emerald-400 tracking-wider">
+                            {virtualAccount.account_number}
+                          </span>
+                          <button
+                            onClick={() => copyToClipboard(virtualAccount.account_number)}
+                            className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
+                            title="Copy Account Number"
+                          >
+                            {copiedAccount ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-slate-400">Beneficiary Name</span>
+                        <span className="text-xs font-bold text-slate-200">{virtualAccount.account_name}</span>
+                      </div>
+                    </div>
+
+                    <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-300 space-y-1">
+                      <p className="font-semibold flex items-center gap-1.5">
+                        <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                        <span>Instant Settlement Instructions:</span>
+                      </p>
+                      <p className="text-slate-300 text-[11px] leading-relaxed">
+                        Transfer any amount from your bank mobile app (GTBank, Access, Kuda, Zenith, OPay, Palmpay). Your Indunix wallet will be automatically credited within seconds via webhook notification.
+                      </p>
+                    </div>
+
                     <button
-                      key={item.id}
-                      type="button"
-                      onClick={() => setChannel(item.id)}
-                      className={`p-3 rounded-xl border text-left flex items-start gap-2.5 transition-all ${
-                        channel === item.id
-                          ? 'bg-emerald-500/10 border-emerald-500/50 text-white'
-                          : 'bg-slate-900/80 border-slate-800 text-slate-400 hover:text-slate-200'
-                      }`}
+                      onClick={onSuccess}
+                      className="w-full py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-semibold text-xs transition-all flex items-center justify-center gap-2 border border-slate-700"
                     >
-                      <Icon className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                      <span className="text-[11px] leading-tight">{item.label}</span>
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      <span>Check / Refresh Wallet Balance</span>
                     </button>
-                  );
-                })}
+                  </div>
+                ) : null}
               </div>
-            </div>
-
-            {/* Submit Button */}
-            <button
-              onClick={handleInitialize}
-              disabled={loading || amount < 1000}
-              className="w-full py-3 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-sm transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/25 disabled:opacity-50"
-            >
-              {loading ? (
-                <span className="animate-spin inline-block w-4 h-4 border-2 border-slate-950 border-t-transparent rounded-full" />
-              ) : (
-                <>
-                  <span>Pay {formatNaira(amount)} in Naira</span>
-                  <ArrowRight className="w-4 h-4" />
-                </>
-              )}
-            </button>
+            )}
           </div>
         )}
       </div>

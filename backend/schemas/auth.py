@@ -29,6 +29,22 @@ class UserOut(BaseModel):
     is_active: bool
     created_at: datetime
 
+class ProfileUpdate(BaseModel):
+    full_name: Optional[str] = None
+    company_name: Optional[str] = None
+
+class PasswordChange(BaseModel):
+    current_password: Optional[str] = None
+    new_password: str
+
+class UserPreferences(BaseModel):
+    login_alerts: bool = True
+    deposit_receipts: bool = True
+    low_balance_alerts: bool = True
+    usage_reports: bool = True
+    theme: str = "dark"
+    clean_numbers: bool = True
+
 class Token(BaseModel):
     access_token: str
     token_type: str = "bearer"
@@ -36,3 +52,4 @@ class Token(BaseModel):
 
 class TokenPayload(BaseModel):
     sub: Optional[str] = None
+

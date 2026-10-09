@@ -186,14 +186,23 @@ class EmailService:
 
     def _send_sync_email(self, to_email: str, subject: str, html_body: str, text_body: str) -> bool:
         """Synchronously transmits email via cPanel SMTP."""
-        if not self.host or not self.user or not self.password:
-            logger.info(f"[SMTP NOT CONFIGURED] Would send email to {to_email}: '{subject}'")
+        host = settings.SMTP_HOST
+        port = settings.SMTP_PORT
+        user = settings.SMTP_USER
+        password = settings.SMTP_PASSWORD
+        from_email = settings.SMTP_FROM_EMAIL or "notifications@indunixai.com"
+        from_name = settings.SMTP_FROM_NAME or "Indunix AI"
+        use_ssl = settings.SMTP_USE_SSL
+        use_tls = settings.SMTP_USE_TLS
+
+        if not host or not user or not password:
+            logger.info(f"[SMTP CREDENTIALS MISSING] Cannot deliver email to {to_email}: '{subject}'. Please set SMTP_HOST, SMTP_USER, and SMTP_PASSWORD in Coolify environment.")
             return False
 
         try:
             msg = MIMEMultipart("alternative")
             msg["Subject"] = subject
-            msg["From"] = f"{self.from_name} <{self.from_email}>"
+            msg["From"] = f"{from_name} <{from_email}>"
             msg["To"] = to_email
             msg["Date"] = datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S +0000")
 
@@ -202,18 +211,18 @@ class EmailService:
             msg.attach(part1)
             msg.attach(part2)
 
-            if self.use_ssl or self.port == 465:
+            if use_ssl or port == 465:
                 # cPanel SSL on Port 465
-                with smtplib.SMTP_SSL(self.host, self.port, timeout=12.0) as server:
-                    server.login(self.user, self.password)
-                    server.sendmail(self.from_email, [to_email], msg.as_string())
+                with smtplib.SMTP_SSL(host, port, timeout=12.0) as server:
+                    server.login(user, password)
+                    server.sendmail(from_email, [to_email], msg.as_string())
             else:
                 # cPanel TLS on Port 587 or standard 25
-                with smtplib.SMTP(self.host, self.port, timeout=12.0) as server:
-                    if self.use_tls or self.port == 587:
+                with smtplib.SMTP(host, port, timeout=12.0) as server:
+                    if use_tls or port == 587:
                         server.starttls()
-                    server.login(self.user, self.password)
-                    server.sendmail(self.from_email, [to_email], msg.as_string())
+                    server.login(user, password)
+                    server.sendmail(from_email, [to_email], msg.as_string())
 
             logger.info(f"[SMTP DISPATCH SUCCESS] Delivered email to {to_email}: '{subject}'")
             return True
@@ -471,4 +480,37 @@ class EmailService:
         wrapped_admin = self._build_html_wrapper(admin_subject, "ACTION REQUIRED", "#DC2626", admin_html)
         asyncio.create_task(self._send_async_email(self.admin_email, admin_subject, wrapped_admin, admin_subject))
 
+    def send_password_changed_alert(self, to_email: str, full_name: str, ip_address: str = "Unknown"):
+        """Security alert triggered when account password is changed."""
+        subject = "Security Notice: Your Indunix AI Password Was Updated"
+        timestamp = datetime.now(timezone.utc).strftime("%d %b %Y, %H:%M UTC")
+        content_html = f"""
+          <h2 style="color: #F8FAFC; margin-top: 0; font-size: 20px;">Password Changed</h2>
+          <p>Hello {full_name or 'Developer'}, your Indunix AI account password was successfully updated.</p>
+
+          <div class="card">
+            <h4 style="margin: 0 0 10px; color: #F59E0B; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px;">Security Audit Details</h4>
+            <table class="data-table">
+              <tr>
+                <td class="data-label">Event</td>
+                <td class="data-val" style="color: #10B981;">Password Updated</td>
+              </tr>
+              <tr>
+                <td class="data-label">Timestamp</td>
+                <td class="data-val">{timestamp}</td>
+              </tr>
+              <tr>
+                <td class="data-label">Originating IP</td>
+                <td class="data-val">{ip_address}</td>
+              </tr>
+            </table>
+          </div>
+
+          <p style="font-size: 13px; color: #94A3B8;">If you did not make this change, please contact support immediately or revoke your credentials.</p>
+        """
+        text_body = f"Your Indunix AI password was updated on {timestamp} from IP {ip_address}."
+        html = self._build_html_wrapper(subject, "SECURITY ALERT", "#F59E0B", content_html)
+        asyncio.create_task(self._send_async_email(to_email, subject, html, text_body))
+
 email_service = EmailService()
+

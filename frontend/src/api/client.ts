@@ -165,6 +165,52 @@ export const api = {
     return res.json();
   },
 
+  async updateProfile(data: { full_name?: string; company_name?: string }): Promise<User> {
+    const res = await fetch(`${API_BASE}/api/auth/profile`, {
+      method: 'PUT',
+      headers: { ...getAuthHeader(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Failed to update profile');
+    }
+    const updatedUser = await res.json();
+    localStorage.setItem('indunix_user', JSON.stringify(updatedUser));
+    return updatedUser;
+  },
+
+  async changePassword(data: { current_password?: string; new_password: string }) {
+    const res = await fetch(`${API_BASE}/api/auth/password`, {
+      method: 'PUT',
+      headers: { ...getAuthHeader(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Failed to change password');
+    }
+    return res.json();
+  },
+
+  async getPreferences() {
+    const res = await fetch(`${API_BASE}/api/auth/preferences`, {
+      headers: getAuthHeader(),
+    });
+    if (!res.ok) return { login_alerts: true, deposit_receipts: true, low_balance_alerts: true, usage_reports: true, theme: 'dark', clean_numbers: true };
+    return res.json();
+  },
+
+  async updatePreferences(data: any) {
+    const res = await fetch(`${API_BASE}/api/auth/preferences`, {
+      method: 'PUT',
+      headers: { ...getAuthHeader(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error('Failed to save preferences');
+    return res.json();
+  },
+
   logout() {
     localStorage.removeItem('indunix_token');
     localStorage.removeItem('indunix_user');
@@ -186,7 +232,7 @@ export const api = {
     return res.json();
   },
 
-  async initializeDeposit(amount_ngn: number, channel = 'CARD'): Promise<{ authorization_url: string; reference: string; amount_ngn: number }> {
+  async initializeDeposit(amount_ngn: number, channel = 'CARD'): Promise<{ authorization_url: string; access_code: string; reference: string; amount_ngn: number; public_key?: string }> {
     const res = await fetch(`${API_BASE}/api/billing/deposit`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
@@ -199,15 +245,25 @@ export const api = {
     return res.json();
   },
 
-  async verifyDemoDeposit(reference: string): Promise<any> {
-    const res = await fetch(`${API_BASE}/api/billing/verify-demo`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...getAuthHeader() },
-      body: JSON.stringify({ reference }),
+  async verifyTransaction(reference: string): Promise<{ status: string; message?: string; reference: string; amount_ngn?: number; error?: string }> {
+    const res = await fetch(`${API_BASE}/api/billing/verify/${reference}`, {
+      headers: getAuthHeader(),
     });
-    if (!res.ok) throw new Error('Demo verification failed');
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Payment verification check failed');
+    }
     return res.json();
   },
+
+  async getVirtualAccount(): Promise<{ bank_name: string; account_number: string; account_name: string; currency: string; notice?: string }> {
+    const res = await fetch(`${API_BASE}/api/billing/virtual-account`, {
+      headers: getAuthHeader(),
+    });
+    if (!res.ok) throw new Error('Failed to load dedicated virtual account');
+    return res.json();
+  },
+
 
   async getTransactions(): Promise<TransactionItem[]> {
     const res = await fetch(`${API_BASE}/api/billing/transactions`, {
@@ -445,14 +501,6 @@ export const api = {
       headers: getAuthHeader(),
     });
     if (!res.ok) throw new Error('Failed to load admin metrics');
-    return res.json();
-  },
-
-  async verifyTransaction(reference: string) {
-    const res = await fetch(`${API_BASE}/api/billing/verify/${reference}`, {
-      headers: getAuthHeader(),
-    });
-    if (!res.ok) throw new Error('Failed to verify transaction');
     return res.json();
   },
 };

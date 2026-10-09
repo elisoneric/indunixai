@@ -213,25 +213,25 @@ export const LivePlayground: React.FC<LivePlaygroundProps> = ({ selectedModelId 
                 )}
               </div>
 
-              {/* Metrics Pill Group */}
-              <div className="flex items-center gap-4 text-[11px]">
-                <div className="flex items-center gap-1">
+              {/* Metrics Pill Group with Clean Modern Digits */}
+              <div className="flex items-center gap-4 text-[11px] clean-nums">
+                <div className="flex items-center gap-1 text-slate-300">
                   <Clock className="w-3.5 h-3.5 text-slate-500" />
-                  <span>{latencyMs}ms</span>
+                  <span className="clean-nums">{latencyMs}ms</span>
                 </div>
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1 text-slate-300">
                   <Zap className="w-3.5 h-3.5 text-slate-500" />
-                  <span>{tokensPerSec} tok/s</span>
+                  <span className="clean-nums">{tokensPerSec} tok/s</span>
                 </div>
                 <div className="flex items-center gap-1 text-emerald-300 font-semibold">
                   <Coins className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>{formatNaira(costEstimatedNgn())}</span>
+                  <span className="clean-nums">{formatNaira(costEstimatedNgn())}</span>
                 </div>
               </div>
             </div>
 
             {/* Response Stream Content */}
-            <div className="p-5 flex-1 overflow-y-auto text-sm text-slate-200 leading-relaxed font-mono whitespace-pre-wrap select-text">
+            <div className="p-5 flex-1 overflow-y-auto text-sm text-slate-200 leading-relaxed select-text">
               {errorMsg ? (
                 <div className="p-4 rounded-lg bg-red-950/40 border border-red-500/30 text-red-300 text-xs">
                   {errorMsg}

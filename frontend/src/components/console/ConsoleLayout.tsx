@@ -9,9 +9,10 @@ import {
   LogOut,
   ArrowLeft,
   Cpu,
-  PlusCircle,
   User as UserIcon,
   ShieldAlert,
+  Settings,
+  RefreshCw,
 } from 'lucide-react';
 import { User, Wallet, UsageSummary, ApiKeyItem, TransactionItem, UsageLogItem } from '../../api/client';
 import { formatNaira } from '../../utils/formatters';
@@ -22,6 +23,7 @@ import { BillingView } from './BillingView';
 import { EnterpriseView } from './EnterpriseView';
 import { AdminManagementView } from './AdminManagementView';
 import { LivePlayground } from '../landing/LivePlayground';
+import { ProfileSettingsModal } from '../modals/ProfileSettingsModal';
 
 interface ConsoleLayoutProps {
   user: User;
@@ -34,6 +36,7 @@ interface ConsoleLayoutProps {
   onRefreshData: () => void;
   onLogout: () => void;
   onNavigateHome: () => void;
+  onUserUpdated: (updatedUser: User) => void;
 }
 
 export const ConsoleLayout: React.FC<ConsoleLayoutProps> = ({
@@ -47,9 +50,21 @@ export const ConsoleLayout: React.FC<ConsoleLayoutProps> = ({
   onRefreshData,
   onLogout,
   onNavigateHome,
+  onUserUpdated,
 }) => {
   const [activeTab, setActiveTab] = useState<'overview' | 'keys' | 'logs' | 'billing' | 'enterprise' | 'playground' | 'admin'>('overview');
   const [logFilter, setLogFilter] = useState<string>('');
+  const [isProfileOpen, setIsProfileOpen] = useState<boolean>(false);
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await onRefreshData();
+    } finally {
+      setTimeout(() => setIsRefreshing(false), 500);
+    }
+  };
 
   const navItems = [
     { id: 'overview', label: 'Dashboard Overview', icon: LayoutDashboard },
@@ -63,10 +78,11 @@ export const ConsoleLayout: React.FC<ConsoleLayoutProps> = ({
 
   return (
     <div className="min-h-screen bg-[#080B11] text-[#F8FAFC] flex flex-col md:flex-row">
-      {/* Sidebar */}
-      <aside className="w-full md:w-64 bg-[#0A0E18] border-r border-slate-800/80 flex flex-col justify-between shrink-0">
-        <div>
-          {/* Logo / Brand */}
+      {/* Sidebar: Fixed height on desktop, sticky, with profile anchored at bottom */}
+      <aside className="w-full md:w-64 md:h-screen md:sticky md:top-0 bg-[#0A0E18] border-r border-slate-800/80 flex flex-col justify-between shrink-0 z-30">
+        {/* Top Scrollable Navigation Section */}
+        <div className="flex-1 overflow-y-auto">
+          {/* Logo / Brand Header */}
           <div className="p-6 border-b border-slate-800/80 flex items-center justify-between">
             <div className="flex items-center gap-2.5">
               <div className="w-8 h-8 rounded-lg bg-emerald-500/20 flex items-center justify-center text-emerald-400 font-bold border border-emerald-500/30">
@@ -112,25 +128,49 @@ export const ConsoleLayout: React.FC<ConsoleLayoutProps> = ({
           </nav>
         </div>
 
-        {/* Sidebar Footer: User Card */}
-        <div className="p-4 border-t border-slate-800/80 space-y-3">
-          <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800 flex items-center justify-between">
+        {/* Sidebar Footer: USER PROFILE FIXED AT BOTTOM (NO SCROLL NEEDED) */}
+        <div className="shrink-0 p-4 border-t border-slate-800/80 bg-[#0A0E18] space-y-2 mt-auto">
+          <div
+            onClick={() => setIsProfileOpen(true)}
+            title="Click to view profile & preference settings"
+            className="p-3 rounded-xl bg-slate-900/80 hover:bg-slate-850 border border-slate-800 hover:border-emerald-500/40 cursor-pointer flex items-center justify-between transition-all group"
+          >
             <div className="flex items-center gap-2.5 overflow-hidden">
-              <div className="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center text-slate-300 font-bold text-xs shrink-0">
-                {user.full_name?.charAt(0) || 'D'}
+              <div className="w-8 h-8 rounded-lg bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-bold text-xs shrink-0 group-hover:bg-emerald-500 group-hover:text-slate-950 transition-colors">
+                {user.full_name?.charAt(0) || 'U'}
               </div>
               <div className="truncate text-left">
-                <div className="text-xs font-bold text-white truncate">{user.full_name}</div>
+                <div className="text-xs font-bold text-white truncate group-hover:text-emerald-300 transition-colors">
+                  {user.full_name}
+                </div>
                 <div className="text-[10px] text-slate-500 truncate">{user.email}</div>
               </div>
             </div>
-            <button
-              onClick={onLogout}
-              title="Sign Out"
-              className="p-1.5 rounded-lg text-slate-400 hover:text-red-400 hover:bg-slate-800 transition-colors"
-            >
-              <LogOut className="w-4 h-4" />
-            </button>
+
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsProfileOpen(true);
+                }}
+                title="Account Settings"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-400 hover:bg-slate-800 transition-colors"
+              >
+                <Settings className="w-4 h-4" />
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onLogout();
+                }}
+                title="Sign Out"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-red-400 hover:bg-slate-800 transition-colors"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         </div>
       </aside>
@@ -141,20 +181,31 @@ export const ConsoleLayout: React.FC<ConsoleLayoutProps> = ({
         <header className="h-16 px-6 border-b border-slate-800/80 bg-[#080B11]/90 backdrop-blur-md flex items-center justify-between sticky top-0 z-40">
           <div className="flex items-center gap-2">
             <span className="text-xs font-mono text-slate-400">Environment:</span>
-            <span className="px-2 py-0.5 rounded text-[11px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-bold">
+            <span className="px-2 py-0.5 rounded text-[11px] font-mono bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-bold clean-nums">
               LIVE NIGERIA (NGN)
             </span>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
+            {/* Refresh Button to fetch new records */}
+            <button
+              onClick={handleRefresh}
+              disabled={isRefreshing}
+              title="Refresh Balance, API Keys & Usage Logs"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white transition-all text-xs font-medium disabled:opacity-50"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-emerald-400' : 'text-slate-400'}`} />
+              <span className="hidden sm:inline">Refresh</span>
+            </button>
+
             {/* Wallet Balance Widget */}
             <div 
               onClick={onOpenDeposit}
               className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900 border border-emerald-500/30 hover:border-emerald-500 cursor-pointer transition-all shadow-sm group"
             >
               <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="text-xs font-mono text-slate-400">Credits:</span>
-              <span className="text-xs font-mono font-bold text-emerald-300">
+              <span className="text-xs text-slate-400">Credits:</span>
+              <span className="text-xs font-bold text-emerald-300 clean-nums">
                 {wallet ? formatNaira(wallet.total_available_ngn) : '₦1,000.00'}
               </span>
               <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded font-bold group-hover:bg-emerald-500 group-hover:text-slate-950 transition-colors">
@@ -218,6 +269,15 @@ export const ConsoleLayout: React.FC<ConsoleLayoutProps> = ({
           )}
         </main>
       </div>
+
+      {/* Profile & Preferences Settings Modal */}
+      <ProfileSettingsModal
+        isOpen={isProfileOpen}
+        onClose={() => setIsProfileOpen(false)}
+        user={user}
+        onUserUpdated={onUserUpdated}
+        onLogout={onLogout}
+      />
     </div>
   );
 };

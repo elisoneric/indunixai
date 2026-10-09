@@ -120,30 +120,20 @@ async def verify_transaction(
             channel=paystack_res.get("channel", tx.channel),
             metadata=paystack_res.get("metadata", {})
         )
-        return {"status": "success", "message": msg, "reference": reference}
+        return {"status": "success", "message": msg, "reference": reference, "amount_ngn": amount}
     else:
-        return {"status": "pending", "message": "Payment pending or unconfirmed by gateway", "reference": reference}
+        return {"status": "pending", "message": paystack_res.get("error") or "Payment pending or unconfirmed by gateway", "reference": reference}
 
-@router.post("/verify-demo")
-async def verify_demo_deposit(
-    payload: ManualVerifyRequest,
+@router.get("/virtual-account")
+async def get_virtual_account(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Fallback manual credit confirmation for verified reference."""
-    result = await db.execute(select(Transaction).where(Transaction.reference == payload.reference))
-    tx = result.scalar_one_or_none()
-    if not tx:
-        raise HTTPException(status_code=404, detail="Transaction reference not found")
-
-    success, msg = await paystack_service.process_successful_charge(
-        db=db,
-        reference=tx.reference,
-        amount_ngn=round(float(tx.amount_ngn), 2),
-        channel=tx.channel,
-        metadata={"verified_direct": True}
-    )
-    return {"status": "success", "message": msg, "reference": tx.reference}
+    """
+    Returns the user's Dedicated NUBAN Virtual Account for direct bank transfer deposits.
+    """
+    account_info = await paystack_service.get_or_create_dedicated_account(db, user)
+    return account_info
 
 @router.get("/transactions", response_model=List[TransactionOut])
 async def list_transactions(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):

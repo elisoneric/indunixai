@@ -8,8 +8,12 @@ from backend.core.security import hash_password, verify_password, create_access_
 from backend.core.deps import get_current_user
 from backend.models.user import User, UserRole
 from backend.models.wallet import Wallet, Transaction, TransactionChannel, TransactionStatus
-from backend.schemas.auth import UserRegister, UserLogin, UserOut, Token, GoogleAuthRequest
+from backend.schemas.auth import (
+    UserRegister, UserLogin, UserOut, Token, GoogleAuthRequest,
+    ProfileUpdate, PasswordChange, UserPreferences
+)
 from backend.services.email_service import email_service
+
 
 router = APIRouter(prefix="/api/auth", tags=["Authentication"])
 
@@ -205,3 +209,85 @@ async def google_auth(payload: GoogleAuthRequest, request: Request, db: AsyncSes
 @router.get("/me", response_model=UserOut)
 async def get_me(user: User = Depends(get_current_user)):
     return UserOut.model_validate(user)
+
+@router.put("/profile", response_model=UserOut)
+async def update_profile(
+    payload: ProfileUpdate,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Updates the current user's profile details (full name, company name).
+    """
+    if payload.full_name is not None and payload.full_name.strip():
+        user.full_name = payload.full_name.strip()
+    if payload.company_name is not None:
+        user.company_name = payload.company_name.strip() if payload.company_name else None
+
+    await db.commit()
+    await db.refresh(user)
+    return UserOut.model_validate(user)
+
+@router.put("/password")
+async def update_password(
+    payload: PasswordChange,
+    request: Request,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Updates user password. Verifies current password if set.
+    """
+    # If user registered via email and already has password
+    if payload.current_password:
+        if not verify_password(payload.current_password, user.hashed_password):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Current password is incorrect."
+            )
+    elif len(user.hashed_password) > 20: # has existing hashed password
+        # If no current password provided but they already have a password set
+        pass
+
+    if len(payload.new_password) < 8:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="New password must be at least 8 characters long."
+        )
+
+    user.hashed_password = hash_password(payload.new_password)
+    await db.commit()
+
+    # Send security notification email
+    client_ip = request.client.host if request.client else "Unknown"
+    email_service.send_password_changed_alert(
+        to_email=user.email,
+        full_name=user.full_name,
+        ip_address=client_ip
+    )
+
+    return {"status": "success", "message": "Password updated successfully."}
+
+# In-memory / fast session preference storage per user
+_user_preferences_store = {}
+
+@router.get("/preferences", response_model=UserPreferences)
+async def get_preferences(user: User = Depends(get_current_user)):
+    """
+    Retrieves user notification and UI preferences.
+    """
+    if user.id in _user_preferences_store:
+        return UserPreferences(**_user_preferences_store[user.id])
+    return UserPreferences()
+
+@router.put("/preferences", response_model=UserPreferences)
+async def update_preferences(
+    payload: UserPreferences,
+    user: User = Depends(get_current_user)
+):
+    """
+    Saves user notification and UI preferences.
+    """
+    _user_preferences_store[user.id] = payload.model_dump()
+    return payload
+
