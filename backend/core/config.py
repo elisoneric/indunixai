@@ -40,6 +40,9 @@ class Settings(BaseSettings):
     # Enterprise On-premise Telemetry Master Signing Key
     ENTERPRISE_LEASE_SIGNING_KEY: str = Field(default="indunix-edge-ent-master-sig-key-2026", validation_alias="ENTERPRISE_LEASE_SIGNING_KEY")
     
+    # Social OAuth (Google Sign-In)
+    GOOGLE_CLIENT_ID: Optional[str] = Field(default=None, validation_alias="GOOGLE_CLIENT_ID")
+    
     # SMTP Email Configuration (cPanel / Roundcube Webmail compatible)
     SMTP_HOST: Optional[str] = Field(default=None, validation_alias="SMTP_HOST")
     SMTP_PORT: int = Field(default=465, validation_alias="SMTP_PORT")

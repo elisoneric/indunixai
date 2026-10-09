@@ -129,6 +129,22 @@ export const api = {
     return result;
   },
 
+  async googleAuth(data: { credential?: string; email?: string; full_name?: string }) {
+    const res = await fetch(`${API_BASE}/api/auth/google`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Google authentication failed');
+    }
+    const result = await res.json();
+    localStorage.setItem('indunix_token', result.access_token);
+    localStorage.setItem('indunix_user', JSON.stringify(result.user));
+    return result;
+  },
+
   async getMe(): Promise<User> {
     const res = await fetch(`${API_BASE}/api/auth/me`, {
       headers: getAuthHeader(),

@@ -13,6 +13,11 @@ class UserLogin(BaseModel):
     email: EmailStr
     password: str
 
+class GoogleAuthRequest(BaseModel):
+    credential: Optional[str] = None
+    email: Optional[EmailStr] = None
+    full_name: Optional[str] = None
+
 class UserOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

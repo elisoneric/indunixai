@@ -115,7 +115,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           {mode === 'register' && (
             <>
               <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">Your Name</label>
+                <label className="block text-xs font-medium text-slate-300 mb-1">Full Name</label>
                 <div className="relative">
                   <User className="absolute left-3 top-2.5 w-4 h-4 text-slate-500" />
                   <input
@@ -123,8 +123,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     required
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
-                    placeholder="Your Name"
-                    className="w-full pl-9 pr-3 py-2 bg-slate-900 border border-slate-750 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors"
+                    className="w-full pl-9 pr-3 py-2 bg-slate-900 border border-slate-750 rounded-lg text-sm text-white focus:outline-none focus:border-emerald-500 transition-colors"
                   />
                 </div>
               </div>
@@ -137,8 +136,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                     type="text"
                     value={companyName}
                     onChange={(e) => setCompanyName(e.target.value)}
-                    placeholder="Company name"
-                    className="w-full pl-9 pr-3 py-2 bg-slate-900 border border-slate-750 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors"
+                    className="w-full pl-9 pr-3 py-2 bg-slate-900 border border-slate-750 rounded-lg text-sm text-white focus:outline-none focus:border-emerald-500 transition-colors"
                   />
                 </div>
               </div>
@@ -154,8 +152,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="name@company.com"
-                className="w-full pl-9 pr-3 py-2 bg-slate-900 border border-slate-750 rounded-lg text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors"
+                className="w-full pl-9 pr-3 py-2 bg-slate-900 border border-slate-750 rounded-lg text-sm text-white focus:outline-none focus:border-emerald-500 transition-colors"
               />
             </div>
           </div>

@@ -37,3 +37,29 @@ async def test_auth_registration_and_login():
         wallet_data = wallet_res.json()
         assert wallet_data["bonus_credits_ngn"] == 1000.0
         assert wallet_data["total_available_ngn"] >= 1000.0
+
+@pytest.mark.asyncio
+async def test_google_auth():
+    await init_db()
+    transport = ASGITransport(app=app)
+    google_email = f"google_user_{uuid.uuid4().hex[:8]}@indunixai.com"
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        res = await client.post("/api/auth/google", json={
+            "email": google_email,
+            "full_name": "Google Verified User",
+            "google_id": f"gid_{uuid.uuid4().hex[:12]}"
+        })
+        assert res.status_code == 200, res.text
+        data = res.json()
+        assert "access_token" in data
+        assert data["user"]["email"] == google_email
+
+        # Re-authenticating with same Google ID should succeed (login)
+        res_login = await client.post("/api/auth/google", json={
+            "email": google_email,
+            "full_name": "Google Verified User",
+            "google_id": f"gid_{uuid.uuid4().hex[:12]}"
+        })
+        assert res_login.status_code == 200
+        assert res_login.json()["user"]["email"] == google_email
+
