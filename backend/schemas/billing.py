@@ -32,3 +32,8 @@ class TransactionOut(BaseModel):
 
 class ManualVerifyRequest(BaseModel):
     reference: str
+
+class VirtualAccountProvisionRequest(BaseModel):
+    phone: Optional[str] = None
+    nin_or_bvn: Optional[str] = None
+

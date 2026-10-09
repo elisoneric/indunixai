@@ -29,6 +29,12 @@ class Wallet(Base):
     is_frozen = Column(Boolean, default=False, nullable=False)
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
+    # Dedicated NUBAN Virtual Account fields (Persistent)
+    dedicated_account_bank = Column(String(100), nullable=True)
+    dedicated_account_number = Column(String(50), nullable=True)
+    dedicated_account_name = Column(String(200), nullable=True)
+    paystack_customer_code = Column(String(100), nullable=True)
+
     # Relationships
     user = relationship("User", back_populates="wallet")
     transactions = relationship("Transaction", back_populates="wallet", cascade="all, delete-orphan")

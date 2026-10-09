@@ -60,3 +60,18 @@ async def test_paystack_deposit_and_webhook():
         wallet_res = await client.get("/api/billing/wallet", headers=headers)
         wallet = wallet_res.json()
         assert wallet["balance_ngn"] == 5000.0
+
+        # Test Virtual Account retrieval endpoint
+        va_res = await client.get("/api/billing/virtual-account", headers=headers)
+        assert va_res.status_code == 200
+        va_data = va_res.json()
+        assert "is_assigned" in va_data or "bank_name" in va_data or "error" in va_data
+
+        # Test Virtual Account provisioning endpoint
+        prov_res = await client.post(
+            "/api/billing/virtual-account/provision",
+            json={"phone": "08012345678", "nin_or_bvn": "12345678901"},
+            headers=headers
+        )
+        assert prov_res.status_code == 200
+

@@ -21,18 +21,22 @@ h1, h2, h3, h4, .font-heading {
 }
 
 code, pre, .font-mono {
-  font-family: 'ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', monospace;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, monospace;
+  font-variant-numeric: normal;
+  font-feature-settings: "zero" 0;
 }
 
-/* Enforce clean, open numbers with NO dot in the center */
-* {
+/* Enforce clean, open numbers with NO slash and NO dot inside zero */
+*, :root {
+  font-variant-numeric: normal;
+  -webkit-font-feature-settings: "zero" 0;
   font-feature-settings: "zero" 0;
 }
 
 .font-clean-num, .clean-nums {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   font-variant-numeric: tabular-nums;
-  font-feature-settings: "zero" 0, "tnum" 1;
+  font-feature-settings: "zero" 0;
 }
 
 

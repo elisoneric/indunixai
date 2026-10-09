@@ -10,10 +10,13 @@ import {
   RefreshCw,
   Copy,
   Check,
-  AlertCircle
+  AlertCircle,
+  Download,
+  ShieldAlert,
 } from 'lucide-react';
 import { api, User } from '../../api/client';
 import { formatNaira } from '../../utils/formatters';
+import { downloadPdfReceipt } from '../../utils/receiptGenerator';
 
 interface BillingModalProps {
   isOpen: boolean;
@@ -26,7 +29,7 @@ export const BillingModal: React.FC<BillingModalProps> = ({
   isOpen,
   onClose,
   onSuccess,
-  user
+  user,
 }) => {
   const [activeTab, setActiveTab] = useState<'checkout' | 'virtual_account'>('checkout');
   const [amount, setAmount] = useState<number>(5000);
@@ -37,13 +40,20 @@ export const BillingModal: React.FC<BillingModalProps> = ({
 
   // Dedicated Virtual Account state
   const [virtualAccount, setVirtualAccount] = useState<{
-    bank_name: string;
-    account_number: string;
-    account_name: string;
-    currency: string;
-    notice?: string;
+    bank_name?: string;
+    account_number?: string;
+    account_name?: string;
+    currency?: string;
+    is_assigned?: boolean;
+    requires_kyc?: boolean;
+    error?: string;
   } | null>(null);
   const [loadingVirtual, setLoadingVirtual] = useState<boolean>(false);
+
+  // KYC provisioning fields if required by Paystack
+  const [phone, setPhone] = useState<string>('');
+  const [ninOrBvn, setNinOrBvn] = useState<string>('');
+  const [provisioning, setProvisioning] = useState<boolean>(false);
 
   // Transaction verification & confirmation state
   const [pendingTx, setPendingTx] = useState<{
@@ -56,6 +66,23 @@ export const BillingModal: React.FC<BillingModalProps> = ({
 
   // Preset amounts
   const presetAmounts = [2500, 5000, 10000, 25000, 50000];
+
+  // Keyboard accessibility: Escape to close, Enter to submit
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      } else if (e.key === 'Enter') {
+        if (!loading && !verifying && !pendingTx && !successInfo && activeTab === 'checkout') {
+          handlePaystackCheckout();
+        }
+      }
+    };
+    if (isOpen) {
+      window.addEventListener('keydown', handleKeyDown);
+      return () => window.removeEventListener('keydown', handleKeyDown);
+    }
+  }, [isOpen, activeTab, loading, verifying, pendingTx, successInfo, amount]);
 
   // Dynamically load Paystack Inline JS script
   useEffect(() => {
@@ -81,10 +108,37 @@ export const BillingModal: React.FC<BillingModalProps> = ({
     try {
       const data = await api.getVirtualAccount();
       setVirtualAccount(data);
+      if (data.error && !data.requires_kyc) {
+        setError(data.error);
+      }
     } catch (err: any) {
       setError(err.message || 'Unable to fetch dedicated virtual account');
     } finally {
       setLoadingVirtual(false);
+    }
+  };
+
+  const handleProvisionKYC = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!ninOrBvn || ninOrBvn.trim().length < 11) {
+      setError('Please provide a valid 11-digit NIN or BVN.');
+      return;
+    }
+    setProvisioning(true);
+    setError(null);
+    try {
+      const res = await api.provisionVirtualAccount({
+        phone: phone.trim(),
+        nin_or_bvn: ninOrBvn.trim(),
+      });
+      setVirtualAccount(res);
+      if (res.error) {
+        setError(res.error);
+      }
+    } catch (err: any) {
+      setError(err.message || 'Failed to provision dedicated account with Paystack.');
+    } finally {
+      setProvisioning(false);
     }
   };
 
@@ -157,10 +211,10 @@ export const BillingModal: React.FC<BillingModalProps> = ({
         setPendingTx(null);
         onSuccess();
       } else {
-        setError(res.error || 'Payment confirmation has not yet been received from Paystack. Please wait a moment.');
+        setError(res.error || res.message || 'Payment confirmation has not yet been received from Paystack.');
       }
     } catch (err: any) {
-      setError(err.message || 'Transaction verification error. Please retry in a few seconds.');
+      setError(err.message || 'Transaction verification check error. Please retry in a few moments.');
     } finally {
       setVerifying(false);
     }
@@ -174,6 +228,7 @@ export const BillingModal: React.FC<BillingModalProps> = ({
         <button
           onClick={onClose}
           className="absolute top-5 right-5 text-slate-400 hover:text-white transition-colors p-1"
+          title="Close (Esc)"
         >
           <X className="w-5 h-5" />
         </button>
@@ -192,18 +247,33 @@ export const BillingModal: React.FC<BillingModalProps> = ({
             <div className="p-3 rounded-xl bg-slate-950 text-xs font-mono text-slate-400 border border-slate-800 clean-nums">
               Reference: {successInfo.reference}
             </div>
-            <p className="text-[11px] text-slate-500">
-              An official transaction receipt has been dispatched to {user?.email || 'your email'}.
-            </p>
-            <button
-              onClick={() => {
-                setSuccessInfo(null);
-                onClose();
-              }}
-              className="w-full py-2.5 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-sm transition-all"
-            >
-              Done & Return to Console
-            </button>
+
+            <div className="pt-2 flex flex-col gap-2">
+              <button
+                onClick={() =>
+                  downloadPdfReceipt({
+                    reference: successInfo.reference,
+                    amount_ngn: successInfo.amount,
+                    customerName: user?.full_name,
+                    customerEmail: user?.email,
+                  })
+                }
+                className="w-full py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-semibold text-xs transition-all flex items-center justify-center gap-2 border border-slate-700"
+              >
+                <Download className="w-4 h-4 text-emerald-400" />
+                <span>Download Official PDF Receipt</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setSuccessInfo(null);
+                  onClose();
+                }}
+                className="w-full py-2.5 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-sm transition-all"
+              >
+                Done & Return to Console
+              </button>
+            </div>
           </div>
         ) : pendingTx ? (
           <div className="py-4 space-y-5 text-center">
@@ -243,16 +313,6 @@ export const BillingModal: React.FC<BillingModalProps> = ({
             )}
 
             <div className="flex flex-col gap-2 pt-2">
-              <a
-                href={pendingTx.authorization_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="w-full py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-semibold text-xs transition-all flex items-center justify-center gap-2 border border-slate-700"
-              >
-                <span>Re-open Paystack Checkout</span>
-                <ExternalLink className="w-3.5 h-3.5" />
-              </a>
-
               <button
                 onClick={() => handleVerifyPayment(pendingTx.reference, pendingTx.amount_ngn)}
                 disabled={verifying}
@@ -270,16 +330,20 @@ export const BillingModal: React.FC<BillingModalProps> = ({
                   </>
                 )}
               </button>
+
+              <button
+                onClick={() => handlePaystackCheckout()}
+                className="w-full py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium text-xs transition-all flex items-center justify-center gap-2 border border-slate-700"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>Retry Checkout Session</span>
+              </button>
             </div>
           </div>
         ) : (
           <div>
             {/* Modal Header */}
             <div className="text-center mb-5">
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 text-xs font-mono mb-2 border border-emerald-500/20">
-                <ShieldCheck className="w-3.5 h-3.5" />
-                <span>Native NGN Wallet Top-Up</span>
-              </div>
               <h3 className="font-heading text-2xl font-bold text-white">
                 Add Funds to Naira Wallet
               </h3>
@@ -299,7 +363,7 @@ export const BillingModal: React.FC<BillingModalProps> = ({
                 }`}
               >
                 <CreditCard className="w-3.5 h-3.5" />
-                <span>Paystack Instant Checkout</span>
+                <span>Instant Checkout</span>
               </button>
               <button
                 onClick={() => setActiveTab('virtual_account')}
@@ -372,13 +436,13 @@ export const BillingModal: React.FC<BillingModalProps> = ({
                     <span className="animate-spin inline-block w-4 h-4 border-2 border-slate-950 border-t-transparent rounded-full" />
                   ) : (
                     <>
-                      <span>Open Paystack Checkout ({formatNaira(amount)})</span>
+                      <span>Pay {formatNaira(amount)}</span>
                       <ArrowRight className="w-4 h-4" />
                     </>
                   )}
                 </button>
                 <p className="text-center text-[11px] text-slate-500">
-                  Supports Nigerian Cards, USSD (*737#, *966# etc), Bank Transfer, and Apple Pay.
+                  Online payments
                 </p>
               </div>
             )}
@@ -389,24 +453,24 @@ export const BillingModal: React.FC<BillingModalProps> = ({
                 {loadingVirtual ? (
                   <div className="py-8 text-center text-slate-400 space-y-2">
                     <RefreshCw className="w-6 h-6 animate-spin mx-auto text-emerald-400" />
-                    <p className="text-xs">Generating your unique Paystack NUBAN...</p>
+                    <p className="text-xs">Fetching dedicated virtual account...</p>
                   </div>
-                ) : virtualAccount ? (
+                ) : virtualAccount?.account_number ? (
                   <div className="space-y-4">
                     <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-3">
                       <div className="flex items-center justify-between border-b border-slate-850 pb-2">
                         <span className="text-xs text-slate-400">Assigned Bank</span>
-                        <span className="text-xs font-bold text-white">{virtualAccount.bank_name}</span>
+                        <span className="text-xs font-bold text-white">{virtualAccount.bank_name || 'Wema Bank'}</span>
                       </div>
 
                       <div className="flex items-center justify-between border-b border-slate-850 pb-2">
                         <span className="text-xs text-slate-400">Account Number</span>
                         <div className="flex items-center gap-2">
-                          <span className="text-base font-mono font-bold text-emerald-400 tracking-wider">
+                          <span className="text-base clean-nums font-bold text-emerald-400 tracking-wider">
                             {virtualAccount.account_number}
                           </span>
                           <button
-                            onClick={() => copyToClipboard(virtualAccount.account_number)}
+                            onClick={() => copyToClipboard(virtualAccount.account_number || '')}
                             className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors"
                             title="Copy Account Number"
                           >
@@ -421,25 +485,73 @@ export const BillingModal: React.FC<BillingModalProps> = ({
                       </div>
                     </div>
 
-                    <div className="p-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-300 space-y-1">
-                      <p className="font-semibold flex items-center gap-1.5">
-                        <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                        <span>Instant Settlement Instructions:</span>
-                      </p>
-                      <p className="text-slate-300 text-[11px] leading-relaxed">
-                        Transfer any amount from your bank mobile app (GTBank, Access, Kuda, Zenith, OPay, Palmpay). Your Indunix wallet will be automatically credited within seconds via webhook notification.
-                      </p>
-                    </div>
+                    <p className="text-center text-[11px] text-slate-400">
+                      Automated wallet credit upon transfer settlement.
+                    </p>
 
                     <button
                       onClick={onSuccess}
                       className="w-full py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-semibold text-xs transition-all flex items-center justify-center gap-2 border border-slate-700"
                     >
                       <RefreshCw className="w-3.5 h-3.5" />
-                      <span>Check / Refresh Wallet Balance</span>
+                      <span>Refresh Balance</span>
                     </button>
                   </div>
-                ) : null}
+                ) : (
+                  /* Provisioning KYC Form if Paystack requires identification */
+                  <form onSubmit={handleProvisionKYC} className="space-y-4">
+                    <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-300 space-y-1.5">
+                      <div className="flex items-center gap-2 text-emerald-400 font-bold">
+                        <ShieldCheck className="w-4 h-4" />
+                        <span>Request Dedicated Virtual Account (NUBAN)</span>
+                      </div>
+                      <p className="text-[11px] text-slate-400">
+                        To generate an official dedicated Nigerian bank account under CBN guidelines, enter your phone and NIN or BVN.
+                      </p>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-slate-300 mb-1.5">
+                        Phone Number
+                      </label>
+                      <input
+                        type="tel"
+                        value={phone}
+                        onChange={(e) => setPhone(e.target.value)}
+                        placeholder="e.g. 08012345678"
+                        required
+                        className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs clean-nums text-white focus:outline-none focus:border-emerald-500 transition-colors"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-slate-300 mb-1.5">
+                        National Identity Number (NIN) or BVN (11 Digits)
+                      </label>
+                      <input
+                        type="text"
+                        maxLength={11}
+                        value={ninOrBvn}
+                        onChange={(e) => setNinOrBvn(e.target.value)}
+                        placeholder="11-digit NIN or BVN"
+                        required
+                        className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs clean-nums text-white focus:outline-none focus:border-emerald-500 transition-colors"
+                      />
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={provisioning || !ninOrBvn}
+                      className="w-full py-3 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-sm transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/25 disabled:opacity-50"
+                    >
+                      {provisioning ? (
+                        <span className="animate-spin inline-block w-4 h-4 border-2 border-slate-950 border-t-transparent rounded-full" />
+                      ) : (
+                        <span>Generate Dedicated NUBAN</span>
+                      )}
+                    </button>
+                  </form>
+                )}
               </div>
             )}
           </div>

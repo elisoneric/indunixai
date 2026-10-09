@@ -59,13 +59,19 @@ export const ProfileSettingsModal: React.FC<ProfileSettingsModalProps> = ({
   const [statusMsg, setStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
     if (isOpen) {
       setFullName(user.full_name || '');
       setCompanyName(user.company_name || '');
       setStatusMsg(null);
       loadPreferences();
+      window.addEventListener('keydown', handleKeyDown);
+      return () => window.removeEventListener('keydown', handleKeyDown);
     }
   }, [isOpen, user]);
+
 
   const loadPreferences = async () => {
     try {

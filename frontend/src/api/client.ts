@@ -256,13 +256,43 @@ export const api = {
     return res.json();
   },
 
-  async getVirtualAccount(): Promise<{ bank_name: string; account_number: string; account_name: string; currency: string; notice?: string }> {
+  async getVirtualAccount(): Promise<{
+    bank_name?: string;
+    account_number?: string;
+    account_name?: string;
+    currency?: string;
+    is_assigned?: boolean;
+    requires_kyc?: boolean;
+    error?: string;
+  }> {
     const res = await fetch(`${API_BASE}/api/billing/virtual-account`, {
       headers: getAuthHeader(),
     });
     if (!res.ok) throw new Error('Failed to load dedicated virtual account');
     return res.json();
   },
+
+  async provisionVirtualAccount(data: { phone?: string; nin_or_bvn?: string }): Promise<{
+    bank_name?: string;
+    account_number?: string;
+    account_name?: string;
+    currency?: string;
+    is_assigned?: boolean;
+    requires_kyc?: boolean;
+    error?: string;
+  }> {
+    const res = await fetch(`${API_BASE}/api/billing/virtual-account/provision`, {
+      method: 'POST',
+      headers: { ...getAuthHeader(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Failed to provision dedicated virtual account');
+    }
+    return res.json();
+  },
+
 
 
   async getTransactions(): Promise<TransactionItem[]> {

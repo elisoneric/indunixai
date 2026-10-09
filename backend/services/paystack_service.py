@@ -1,5 +1,5 @@
 import uuid
-from typing import Dict, Any, Tuple
+from typing import Dict, Any, Tuple, Optional
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -111,58 +111,122 @@ class PaystackService:
         except Exception as e:
             return {"status": "error", "error": str(e)}
 
-    async def get_or_create_dedicated_account(self, db: AsyncSession, user: User) -> Dict[str, Any]:
+    async def get_or_create_dedicated_account(
+        self,
+        db: AsyncSession,
+        user: User,
+        phone: Optional[str] = None,
+        nin_or_bvn: Optional[str] = None
+    ) -> Dict[str, Any]:
         """
         Retrieves or provisions a Paystack Dedicated NUBAN Virtual Account for direct bank transfer deposits.
+        Strictly interfaces with Paystack API. Zero mock fallbacks.
         """
-        secret_key = settings.PAYSTACK_SECRET_KEY
-        account_info = None
+        # 1. Check if user already has an assigned dedicated account on their Wallet
+        wallet_res = await db.execute(select(Wallet).where(Wallet.user_id == user.id))
+        wallet = wallet_res.scalar_one_or_none()
 
-        if secret_key and (secret_key.startswith("sk_live_") or secret_key.startswith("sk_test_")):
-            try:
-                headers = {"Authorization": f"Bearer {secret_key}", "Content-Type": "application/json"}
-                async with httpx.AsyncClient(timeout=8.0) as client:
-                    # 1. Ensure customer on Paystack
-                    name_parts = (user.full_name or "Enterprise User").split()
-                    first_name = name_parts[0]
-                    last_name = " ".join(name_parts[1:]) if len(name_parts) > 1 else "Tech"
-                    cust_res = await client.post(
-                        f"{self.base_url}/customer",
-                        json={"email": user.email, "first_name": first_name, "last_name": last_name},
-                        headers=headers
-                    )
-                    if cust_res.status_code in (200, 201):
-                        cust_data = cust_res.json().get("data", {})
-                        cust_code = cust_data.get("customer_code")
-                        # 2. Request dedicated virtual account
-                        dva_res = await client.post(
-                            f"{self.base_url}/dedicated_account",
-                            json={"customer": cust_code, "preferred_bank": "wema-bank"},
-                            headers=headers
-                        )
-                        if dva_res.status_code in (200, 201):
-                            dva_data = dva_res.json().get("data", {})
-                            account_info = {
-                                "bank_name": dva_data.get("bank", {}).get("name", "Wema Bank"),
-                                "account_number": dva_data.get("account_number"),
-                                "account_name": dva_data.get("account_name", f"INDUNIX AI / {user.full_name}"),
-                                "currency": "NGN"
-                            }
-            except Exception:
-                pass
-
-        if not account_info:
-            import hashlib
-            seed_num = int(hashlib.md5(user.id.encode()).hexdigest()[:8], 16) % 90000000 + 1000000000
-            account_info = {
-                "bank_name": "Wema Bank (Paystack DVA)",
-                "account_number": str(seed_num)[:10],
-                "account_name": f"INDUNIX AI / {user.full_name.upper()}",
+        if wallet and wallet.dedicated_account_number:
+            return {
+                "bank_name": wallet.dedicated_account_bank or "Wema Bank",
+                "account_number": wallet.dedicated_account_number,
+                "account_name": wallet.dedicated_account_name or f"INDUNIX AI / {user.full_name}",
                 "currency": "NGN",
-                "notice": "Instant settlement via Paystack Webhook. Transferred funds credit automatically within 5 seconds."
+                "is_assigned": True
             }
 
-        return account_info
+        secret_key = settings.PAYSTACK_SECRET_KEY
+        if not secret_key or not (secret_key.startswith("sk_live_") or secret_key.startswith("sk_test_")):
+            return {
+                "is_assigned": False,
+                "error": "Paystack Secret Key is not configured on the production server."
+            }
+
+        try:
+            headers = {"Authorization": f"Bearer {secret_key}", "Content-Type": "application/json"}
+            async with httpx.AsyncClient(timeout=12.0) as client:
+                # 1. Create or fetch customer on Paystack
+                name_parts = (user.full_name or "Enterprise User").split()
+                first_name = name_parts[0]
+                last_name = " ".join(name_parts[1:]) if len(name_parts) > 1 else "Tech"
+                cust_payload = {
+                    "email": user.email,
+                    "first_name": first_name,
+                    "last_name": last_name
+                }
+                if phone:
+                    cust_payload["phone"] = phone
+
+                cust_res = await client.post(f"{self.base_url}/customer", json=cust_payload, headers=headers)
+                cust_data = cust_res.json().get("data", {}) if cust_res.status_code in (200, 201) else {}
+                cust_code = cust_data.get("customer_code") or (wallet.paystack_customer_code if wallet else None)
+
+                if not cust_code:
+                    err_msg = cust_res.json().get("message", "Unable to create or locate customer record on Paystack.")
+                    return {"is_assigned": False, "error": err_msg}
+
+                if wallet and not wallet.paystack_customer_code:
+                    wallet.paystack_customer_code = cust_code
+                    await db.commit()
+
+                # 2. If NIN or BVN was provided by user, submit KYC identification to Paystack
+                if nin_or_bvn:
+                    clean_val = nin_or_bvn.strip()
+                    ident_payload = {
+                        "country": "NG",
+                        "type": "bvn" if len(clean_val) == 11 and clean_val.isdigit() else "nin",
+                        "value": clean_val,
+                        "first_name": first_name,
+                        "last_name": last_name
+                    }
+                    if phone:
+                        ident_payload["phone"] = phone
+                    await client.post(
+                        f"{self.base_url}/customer/{cust_code}/identification",
+                        json=ident_payload,
+                        headers=headers
+                    )
+
+                # 3. Request Dedicated Virtual Account from Paystack (Wema Bank or Titan Paystack)
+                dva_res = await client.post(
+                    f"{self.base_url}/dedicated_account",
+                    json={"customer": cust_code, "preferred_bank": "wema-bank"},
+                    headers=headers
+                )
+
+                if dva_res.status_code in (200, 201):
+                    dva_json = dva_res.json()
+                    if dva_json.get("status"):
+                        dva_data = dva_json.get("data", {})
+                        bank_name = dva_data.get("bank", {}).get("name", "Wema Bank")
+                        account_number = dva_data.get("account_number")
+                        account_name = dva_data.get("account_name", f"INDUNIX AI / {user.full_name}")
+
+                        if account_number and wallet:
+                            wallet.dedicated_account_bank = bank_name
+                            wallet.dedicated_account_number = account_number
+                            wallet.dedicated_account_name = account_name
+                            await db.commit()
+
+                        return {
+                            "bank_name": bank_name,
+                            "account_number": account_number,
+                            "account_name": account_name,
+                            "currency": "NGN",
+                            "is_assigned": True
+                        }
+
+                # If Paystack returned an error
+                err_body = dva_res.json()
+                msg = err_body.get("message", "Failed to assign dedicated account on Paystack")
+                requires_kyc = "identification" in msg.lower() or "bvn" in msg.lower() or "nin" in msg.lower() or "phone" in msg.lower()
+                return {
+                    "is_assigned": False,
+                    "requires_kyc": requires_kyc,
+                    "error": msg
+                }
+        except Exception as e:
+            return {"is_assigned": False, "error": f"Gateway network error: {str(e)}"}
 
     async def process_successful_charge(
         self,

@@ -8,7 +8,10 @@ from backend.core.deps import get_current_user
 from backend.core.security import verify_paystack_signature
 from backend.models.user import User
 from backend.models.wallet import Wallet, Transaction, TransactionStatus
-from backend.schemas.billing import DepositRequest, DepositResponse, TransactionOut, ManualVerifyRequest
+from backend.schemas.billing import (
+    DepositRequest, DepositResponse, TransactionOut, ManualVerifyRequest,
+    VirtualAccountProvisionRequest
+)
 from backend.schemas.dashboard import WalletOut
 from backend.services.paystack_service import paystack_service
 
@@ -134,6 +137,24 @@ async def get_virtual_account(
     """
     account_info = await paystack_service.get_or_create_dedicated_account(db, user)
     return account_info
+
+@router.post("/virtual-account/provision")
+async def provision_virtual_account(
+    payload: VirtualAccountProvisionRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Provisions a Dedicated Virtual Account by submitting user phone and NIN/BVN KYC validation to Paystack.
+    """
+    account_info = await paystack_service.get_or_create_dedicated_account(
+        db=db,
+        user=user,
+        phone=payload.phone,
+        nin_or_bvn=payload.nin_or_bvn
+    )
+    return account_info
+
 
 @router.get("/transactions", response_model=List[TransactionOut])
 async def list_transactions(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):

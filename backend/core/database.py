@@ -43,6 +43,18 @@ async def init_db():
         try:
             async with engine.begin() as conn:
                 await conn.run_sync(Base.metadata.create_all)
+                # Ensure new columns exist on existing tables
+                from sqlalchemy import text
+                for col, col_type in [
+                    ("dedicated_account_bank", "VARCHAR(100)"),
+                    ("dedicated_account_number", "VARCHAR(50)"),
+                    ("dedicated_account_name", "VARCHAR(200)"),
+                    ("paystack_customer_code", "VARCHAR(100)"),
+                ]:
+                    try:
+                        await conn.execute(text(f"ALTER TABLE wallets ADD COLUMN {col} {col_type}"))
+                    except Exception:
+                        pass
             logger.info("Database initialized successfully.")
             return
         except Exception as e:
