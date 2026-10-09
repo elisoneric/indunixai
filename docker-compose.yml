@@ -21,7 +21,7 @@ services:
     environment:
       - DATABASE_URL=${DATABASE_URL:-postgresql+asyncpg://${POSTGRES_USER:-indunix_user}:${POSTGRES_PASSWORD:-indunix_secure_pass_2026}@postgres:5432/${POSTGRES_DB:-indunix_db}}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
-      - SECRET_KEY=${SECRET_KEY}
+      - SECRET_KEY=${SECRET_KEY:-indunix-sovereign-ai-jwt-super-secret-key-2026-prod-v1}
       - ENVIRONMENT=${ENVIRONMENT:-production}
       - PAYSTACK_SECRET_KEY=${PAYSTACK_SECRET_KEY:-}
       - PAYSTACK_PUBLIC_KEY=${PAYSTACK_PUBLIC_KEY:-}
@@ -42,10 +42,8 @@ services:
       - ADMIN_NOTIFICATION_EMAIL=${ADMIN_NOTIFICATION_EMAIL:-system@indunixai.com}
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-200127368906-nm76siltlis1m4rk45h77kks71mp77f1.apps.googleusercontent.com}
     depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_started
+      - postgres
+      - redis
     networks:
       - indunix-network
       - coolify
@@ -86,11 +84,6 @@ services:
       - "5432"
     volumes:
       - indunix_postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-indunix_user} -d ${POSTGRES_DB:-indunix_db}"]
-      interval: 3s
-      timeout: 3s
-      retries: 5
     networks:
       - indunix-network
 
