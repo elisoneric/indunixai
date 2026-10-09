@@ -1,0 +1,127 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background-color: #06070A;
+  color: #F8FAFC;
+  letter-spacing: -0.011em;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, .font-heading {
+  font-family: 'Outfit', 'Inter', sans-serif;
+  letter-spacing: -0.025em;
+}
+
+code, pre, .font-mono {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+/* Grok / x.ai Sleek Glassmorphism System */
+.glass-header {
+  background: rgba(6, 7, 10, 0.75);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.glass-panel {
+  background: rgba(12, 14, 20, 0.7);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.glass-card {
+  background: rgba(14, 17, 24, 0.55);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.glass-card:hover {
+  background: rgba(18, 22, 32, 0.75);
+  border-color: rgba(255, 255, 255, 0.16);
+  transform: translateY(-1.5px);
+  box-shadow: 0 16px 36px -12px rgba(0, 0, 0, 0.6);
+}
+
+.glass-sidebar {
+  background: rgba(8, 10, 15, 0.65);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-right: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+/* Grok Pill Button Styles */
+.btn-pill-primary {
+  border-radius: 9999px;
+  background-color: #FFFFFF;
+  color: #06070A;
+  font-weight: 600;
+  padding: 0.4rem 1.15rem;
+  font-size: 0.8125rem;
+  transition: all 0.15s ease;
+  box-shadow: 0 0 20px -3px rgba(255, 255, 255, 0.2);
+}
+.btn-pill-primary:hover {
+  background-color: #E2E8F0;
+  box-shadow: 0 0 25px 0 rgba(255, 255, 255, 0.35);
+  transform: scale(1.02);
+}
+
+.btn-pill-secondary {
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #E2E8F0;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 0.4rem 1rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  transition: all 0.15s ease;
+}
+.btn-pill-secondary:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #FFFFFF;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.24);
+}
+
+/* Subtle Animated Mesh Background */
+.mesh-glow {
+  background: 
+    radial-gradient(circle at 18% 12%, rgba(16, 185, 129, 0.08) 0%, transparent 45%),
+    radial-gradient(circle at 82% 16%, rgba(139, 92, 246, 0.09) 0%, transparent 50%),
+    radial-gradient(circle at 50% 65%, rgba(6, 182, 212, 0.05) 0%, transparent 55%);
+}
+
+.grid-backdrop {
+  background-image: radial-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1px);
+  background-size: 32px 32px;
+}

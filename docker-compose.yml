@@ -1,0 +1,89 @@
+version: '3.8'
+
+services:
+  # Indunix High-Speed Sovereign Gateway & API Server
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: indunix-backend
+    restart: always
+    ports:
+      - "8000:8000"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.backend.rule=Host(`api.indunixai.com`)"
+      - "traefik.http.routers.backend.entrypoints=https"
+      - "traefik.http.routers.backend.tls.certresolver=letsencrypt"
+      - "traefik.http.services.backend.loadbalancer.server.port=8000"
+      - "traefik.http.middlewares.backend-buffering.buffering.maxResponseBodyBytes=0"
+      - "traefik.http.routers.backend.middlewares=backend-buffering"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://indunix_user:indunix_secure_pass_2026@postgres:5432/indunix_db
+      - REDIS_URL=redis://redis:6379/0
+      - SECRET_KEY=indunix-sovereign-ai-jwt-super-secret-key-2026-xyz
+      - PAYSTACK_SECRET_KEY=sk_test_axion_sovereign_mock_secret_key
+      - PAYSTACK_PUBLIC_KEY=pk_test_axion_sovereign_mock_public_key
+      - MOCK_UPSTREAM_IF_UNSET=true
+      - ENTERPRISE_LEASE_SIGNING_KEY=indunix-edge-ent-master-sig-key-2026
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - indunix-network
+
+  # Indunix Dark Glassmorphic Marketing & Developer Console Web App
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: indunix-frontend
+    restart: always
+    ports:
+      - "5173:80"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.frontend.rule=Host(`indunixai.com`) || Host(`www.indunixai.com`) || Host(`docs.indunixai.com`) || Host(`console.indunixai.com`)"
+      - "traefik.http.routers.frontend.entrypoints=https"
+      - "traefik.http.routers.frontend.tls.certresolver=letsencrypt"
+      - "traefik.http.services.frontend.loadbalancer.server.port=80"
+    depends_on:
+      - backend
+    networks:
+      - indunix-network
+
+  # PostgreSQL Ledger & Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: indunix-postgres
+    restart: always
+    environment:
+      - POSTGRES_USER=indunix_user
+      - POSTGRES_PASSWORD=indunix_secure_pass_2026
+      - POSTGRES_DB=indunix_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - indunix_postgres_data:/var/lib/postgresql/data
+    networks:
+      - indunix-network
+
+  # Redis Token Bucket & Cache
+  redis:
+    image: redis:7-alpine
+    container_name: indunix-redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - indunix_redis_data:/data
+    networks:
+      - indunix-network
+
+volumes:
+  indunix_postgres_data:
+  indunix_redis_data:
+
+networks:
+  indunix-network:
+    driver: bridge
