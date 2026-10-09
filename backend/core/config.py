@@ -14,9 +14,10 @@ class Settings(BaseSettings):
     API_V1_STR: str = "/v1"
     
     # Security & JWT
-    SECRET_KEY: str = Field(default="indunix-sovereign-ai-jwt-super-secret-key-ng-2026-xyz", validation_alias="SECRET_KEY")
+    SECRET_KEY: str = Field(default="change-me-to-a-secure-random-64-character-jwt-key-2026", validation_alias="SECRET_KEY")
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 days
+    APP_URL: str = Field(default="https://indunixai.com", validation_alias="APP_URL")
     
     # Database
     DATABASE_URL: str = Field(default="sqlite+aiosqlite:///./indunix.db", validation_alias="DATABASE_URL")
@@ -24,16 +25,17 @@ class Settings(BaseSettings):
     # Redis
     REDIS_URL: str = Field(default="redis://localhost:6379/0", validation_alias="REDIS_URL")
     
-    # Paystack Payments
-    PAYSTACK_SECRET_KEY: str = Field(default="sk_test_axion_sovereign_mock_secret_key", validation_alias="PAYSTACK_SECRET_KEY")
-    PAYSTACK_PUBLIC_KEY: str = Field(default="pk_test_axion_sovereign_mock_public_key", validation_alias="PAYSTACK_PUBLIC_KEY")
+    # Paystack Payments (Parent merchant: Esam Creative Technologies)
+    PAYSTACK_SECRET_KEY: Optional[str] = Field(default=None, validation_alias="PAYSTACK_SECRET_KEY")
+    PAYSTACK_PUBLIC_KEY: Optional[str] = Field(default=None, validation_alias="PAYSTACK_PUBLIC_KEY")
     PAYSTACK_BASE_URL: str = "https://api.paystack.co"
     
     # Internal Upstream AI Providers (COMPLETELY ABSTRACTED AND NEVER EXPOSED TO CLIENTS)
-    GROQ_API_KEY: Optional[str] = Field(default=None, validation_alias="GROQ_API_KEY")
     DEEPSEEK_API_KEY: Optional[str] = Field(default=None, validation_alias="DEEPSEEK_API_KEY")
+    GROQ_API_KEY: Optional[str] = Field(default=None, validation_alias="GROQ_API_KEY")
+    OPENAI_API_KEY: Optional[str] = Field(default=None, validation_alias="OPENAI_API_KEY")
     TOGETHER_API_KEY: Optional[str] = Field(default=None, validation_alias="TOGETHER_API_KEY")
-    MOCK_UPSTREAM_IF_UNSET: bool = Field(default=True, validation_alias="MOCK_UPSTREAM_IF_UNSET")
+    MOCK_UPSTREAM_IF_UNSET: bool = Field(default=False, validation_alias="MOCK_UPSTREAM_IF_UNSET")
     
     # Enterprise On-premise Telemetry Master Signing Key
     ENTERPRISE_LEASE_SIGNING_KEY: str = Field(default="indunix-edge-ent-master-sig-key-2026", validation_alias="ENTERPRISE_LEASE_SIGNING_KEY")

@@ -22,7 +22,7 @@ class TokenMeter:
         Calculates cost in NGN based on the proprietary rate card.
         Formula: (prompt_tokens / 1,000,000 * in_rate) + (completion_tokens / 1,000,000 * out_rate)
         """
-        model_info = settings.RATE_CARD_NGN.get(model, settings.RATE_CARD_NGN["axion-1-core"])
+        model_info = settings.RATE_CARD_NGN.get(model, settings.RATE_CARD_NGN.get("indunix-1-core", settings.RATE_CARD_NGN["axion-1-core"]))
         in_rate = model_info.get("prompt_per_million", 1500.0)
         out_rate = model_info.get("completion_per_million", 1800.0)
 
@@ -46,7 +46,7 @@ class TokenMeter:
         total_funds = float(wallet.balance_ngn) + float(wallet.bonus_credits_ngn)
         if total_funds < 50.0:
             raise InsufficientBalanceException(
-                f"Insufficient Axion wallet balance (₦{total_funds:.2f}). Minimum ₦50 required. Please top up your Naira balance at console.axion.ng"
+                f"Insufficient Indunix AI wallet balance (₦{total_funds:.2f}). Minimum ₦50 required. Please top up your Naira balance at console.indunixai.com"
             )
 
         if api_key and api_key.monthly_spend_limit_ngn is not None:

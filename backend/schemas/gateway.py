@@ -48,13 +48,13 @@ class ChatCompletionResponse(BaseModel):
     model: str
     choices: List[ChatChoice]
     usage: UsageInfo
-    system_fingerprint: Optional[str] = "fp_axion_sovereign_1"
+    system_fingerprint: Optional[str] = "fp_indunix_sovereign_1"
 
 class ModelDescriptor(BaseModel):
     id: str
     object: str = "model"
     created: int = 1710000000
-    owned_by: str = "axion"
+    owned_by: str = "indunix"
     permission: List[Dict[str, Any]] = []
     root: str
     parent: Optional[str] = None

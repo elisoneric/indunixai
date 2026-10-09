@@ -15,7 +15,7 @@ async def enterprise_heartbeat(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    On-premise Axion Edge license verification & 24h lease renewal.
+    On-premise Indunix Edge license verification & 24h lease renewal.
     Used by enterprise edge nodes (e.g. on-prem private GPU clusters).
     """
     result = await db.execute(
@@ -26,7 +26,7 @@ async def enterprise_heartbeat(
     if not contract:
         return EnterpriseHeartbeatResponse(
             status="UNAUTHORIZED",
-            message="Invalid enterprise license key. Local Axion Edge placed on standby."
+            message="Invalid enterprise license key. Local Indunix Edge placed on standby."
         )
 
     # Check contract expiration and status
@@ -40,7 +40,7 @@ async def enterprise_heartbeat(
         return EnterpriseHeartbeatResponse(
             status="UNAUTHORIZED",
             organization_name=contract.organization_name,
-            message="Contract expired or pending renewal. Local Axion Edge placed on standby."
+            message="Contract expired or pending renewal. Local Indunix Edge placed on standby."
         )
 
     # Update contract heartbeat telemetry
@@ -61,5 +61,5 @@ async def enterprise_heartbeat(
         expires_at=expires_at,
         organization_name=contract.organization_name,
         monthly_included_tokens=int(contract.monthly_included_tokens),
-        message="Axion Edge sovereign runtime authorized for 24 hours."
+        message="Indunix Edge sovereign runtime authorized for 24 hours."
     )

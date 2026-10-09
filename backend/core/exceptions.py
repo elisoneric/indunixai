@@ -1,6 +1,6 @@
 from fastapi import HTTPException, status
 
-class AxionGatewayException(HTTPException):
+class IndunixGatewayException(HTTPException):
     def __init__(self, message: str, status_code: int = status.HTTP_500_INTERNAL_SERVER_ERROR, error_type: str = "api_error", code: str = "server_error"):
         detail = {
             "error": {
@@ -12,8 +12,11 @@ class AxionGatewayException(HTTPException):
         }
         super().__init__(status_code=status_code, detail=detail)
 
-class InsufficientBalanceException(AxionGatewayException):
-    def __init__(self, message: str = "Insufficient Axion wallet balance. Please top up your Naira balance at console.axion.ng"):
+# Backward-compatible alias
+AxionGatewayException = IndunixGatewayException
+
+class InsufficientBalanceException(IndunixGatewayException):
+    def __init__(self, message: str = "Insufficient Indunix AI wallet balance. Please top up your Naira balance at console.indunixai.com"):
         super().__init__(
             message=message,
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
@@ -21,8 +24,8 @@ class InsufficientBalanceException(AxionGatewayException):
             code="402"
         )
 
-class InvalidApiKeyException(AxionGatewayException):
-    def __init__(self, message: str = "Invalid or inactive Axion API key provided."):
+class InvalidApiKeyException(IndunixGatewayException):
+    def __init__(self, message: str = "Invalid or inactive Indunix API key provided."):
         super().__init__(
             message=message,
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -30,7 +33,7 @@ class InvalidApiKeyException(AxionGatewayException):
             code="invalid_api_key"
         )
 
-class RateLimitExceededException(AxionGatewayException):
+class RateLimitExceededException(IndunixGatewayException):
     def __init__(self, message: str = "Rate limit exceeded. Please back off and retry."):
         super().__init__(
             message=message,
@@ -39,7 +42,7 @@ class RateLimitExceededException(AxionGatewayException):
             code="rate_limit_exceeded"
         )
 
-class SpendLimitExceededException(AxionGatewayException):
+class SpendLimitExceededException(IndunixGatewayException):
     def __init__(self, message: str = "Monthly spend ceiling reached for this API key."):
         super().__init__(
             message=message,

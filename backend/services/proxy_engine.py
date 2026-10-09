@@ -5,7 +5,7 @@ import uuid
 from typing import AsyncGenerator, Dict, Any, List, Optional
 import httpx
 from backend.core.config import settings
-from backend.core.exceptions import AxionGatewayException
+from backend.core.exceptions import IndunixGatewayException, AxionGatewayException
 from backend.schemas.gateway import ChatCompletionRequest
 
 class ProxyEngine:
@@ -35,7 +35,7 @@ class ProxyEngine:
         "indunix-edge-local": {
             "upstream_provider": "local_vllm",
             "upstream_url": "http://127.0.0.1:8080/v1/chat/completions",
-            "upstream_model": "axion-edge-q4",
+            "upstream_model": "indunix-edge-q4",
             "api_key_env": None,
             "fallback_model": "indunix-1-core"
         },
@@ -155,7 +155,7 @@ class ProxyEngine:
         model: str
     ) -> Dict[str, Any]:
         """Executes non-streaming request with circuit breaker fallback."""
-        route = self.ROUTING_MAP.get(model, self.ROUTING_MAP["axion-1-core"])
+        route = self.ROUTING_MAP.get(model, self.ROUTING_MAP["indunix-1-core"])
         api_key = getattr(settings, route["api_key_env"], None) if route.get("api_key_env") else None
 
         # If upstream key is not provided or mock mode is active, return synthetic response
@@ -168,7 +168,7 @@ class ProxyEngine:
             completion_tokens = max(1, len(reply_text) // 4)
 
             return {
-                "id": f"chatcmpl-axion-{uuid.uuid4().hex[:12]}",
+                "id": f"chatcmpl-indunix-{uuid.uuid4().hex[:12]}",
                 "object": "chat.completion",
                 "created": int(time.time()),
                 "model": model,
@@ -187,7 +187,7 @@ class ProxyEngine:
                     "completion_tokens": completion_tokens,
                     "total_tokens": prompt_tokens + completion_tokens
                 },
-                "system_fingerprint": "fp_axion_sovereign_1"
+                "system_fingerprint": "fp_indunix_sovereign_1"
             }
 
         # Otherwise forward to upstream provider with circuit breaker
@@ -210,7 +210,7 @@ class ProxyEngine:
             if resp.status_code >= 400:
                 raise Exception(f"Upstream returned {resp.status_code}")
             data = resp.json()
-            # Rewrite model name to Axion proprietary tier
+            # Rewrite model name to Indunix AI proprietary tier
             data["model"] = model
             if "choices" in data and len(data["choices"]) > 0:
                 content = data["choices"][0].get("message", {}).get("content", "")
@@ -219,13 +219,13 @@ class ProxyEngine:
             return data
         except Exception:
             # Fallback circuit breaker
-            fallback_model = route.get("fallback_model", "axion-1-core")
+            fallback_model = route.get("fallback_model", "indunix-1-core")
             if fallback_model != model:
                 return await self.execute_non_streaming(request, fallback_model)
             # Synthetic safe recovery
             reply_text = self._generate_synthetic_reply(model, [m.model_dump() for m in request.messages])
             return {
-                "id": f"chatcmpl-axion-{uuid.uuid4().hex[:12]}",
+                "id": f"chatcmpl-indunix-{uuid.uuid4().hex[:12]}",
                 "object": "chat.completion",
                 "created": int(time.time()),
                 "model": model,
@@ -242,10 +242,10 @@ class ProxyEngine:
         Executes streaming SSE response with sub-15ms overhead and proprietary sanitization.
         Yields standard SSE lines: data: { ... }\n\n
         """
-        route = self.ROUTING_MAP.get(model, self.ROUTING_MAP["axion-1-core"])
+        route = self.ROUTING_MAP.get(model, self.ROUTING_MAP["indunix-1-core"])
         api_key = getattr(settings, route["api_key_env"], None) if route.get("api_key_env") else None
 
-        req_id = f"chatcmpl-axion-{uuid.uuid4().hex[:12]}"
+        req_id = f"chatcmpl-indunix-{uuid.uuid4().hex[:12]}"
         created_ts = int(time.time())
 
         # If mock/unset, stream synthetic tokens with true sub-15ms chunk cadence
@@ -283,7 +283,7 @@ class ProxyEngine:
                 }
                 yield f"data: {json.dumps(chunk)}\n\n"
                 # Ultra fast stream for spark, measured cadence for reason/core
-                delay = 0.012 if model == "axion-1-spark" else 0.025
+                delay = 0.012 if model in ("indunix-1-spark", "axion-1-spark") else 0.025
                 await asyncio.sleep(delay)
 
             # Final finish chunk

@@ -18,14 +18,21 @@ services:
       - "traefik.http.services.backend.loadbalancer.server.port=8000"
       - "traefik.http.middlewares.backend-buffering.buffering.maxResponseBodyBytes=0"
       - "traefik.http.routers.backend.middlewares=backend-buffering"
+    env_file:
+      - .env
     environment:
-      - DATABASE_URL=postgresql+asyncpg://indunix_user:indunix_secure_pass_2026@postgres:5432/indunix_db
-      - REDIS_URL=redis://redis:6379/0
-      - SECRET_KEY=indunix-sovereign-ai-jwt-super-secret-key-2026-xyz
-      - PAYSTACK_SECRET_KEY=sk_test_axion_sovereign_mock_secret_key
-      - PAYSTACK_PUBLIC_KEY=pk_test_axion_sovereign_mock_public_key
-      - MOCK_UPSTREAM_IF_UNSET=true
-      - ENTERPRISE_LEASE_SIGNING_KEY=indunix-edge-ent-master-sig-key-2026
+      - DATABASE_URL=${DATABASE_URL:-postgresql+asyncpg://${POSTGRES_USER:-indunix_user}:${POSTGRES_PASSWORD:-indunix_secure_pass_2026}@postgres:5432/${POSTGRES_DB:-indunix_db}}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - SECRET_KEY=${SECRET_KEY}
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+      - PAYSTACK_SECRET_KEY=${PAYSTACK_SECRET_KEY:-}
+      - PAYSTACK_PUBLIC_KEY=${PAYSTACK_PUBLIC_KEY:-}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - TOGETHER_API_KEY=${TOGETHER_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - MOCK_UPSTREAM_IF_UNSET=${MOCK_UPSTREAM_IF_UNSET:-false}
+      - ENTERPRISE_LEASE_SIGNING_KEY=${ENTERPRISE_LEASE_SIGNING_KEY:-indunix-edge-ent-master-sig-key-2026}
     depends_on:
       - postgres
       - redis
@@ -58,9 +65,9 @@ services:
     container_name: indunix-postgres
     restart: always
     environment:
-      - POSTGRES_USER=indunix_user
-      - POSTGRES_PASSWORD=indunix_secure_pass_2026
-      - POSTGRES_DB=indunix_db
+      - POSTGRES_USER=${POSTGRES_USER:-indunix_user}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-indunix_secure_pass_2026}
+      - POSTGRES_DB=${POSTGRES_DB:-indunix_db}
     ports:
       - "5432:5432"
     volumes:

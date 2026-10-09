@@ -30,7 +30,7 @@ class PaystackService:
         if not wallet:
             raise ValueError("Wallet does not exist.")
 
-        reference = f"axion_dep_{uuid.uuid4().hex[:12]}_{int(amount_ngn)}"
+        reference = f"indunix_dep_{uuid.uuid4().hex[:12]}_{int(amount_ngn)}"
 
         # Save pending transaction in database
         tx = Transaction(
@@ -44,8 +44,9 @@ class PaystackService:
         db.add(tx)
         await db.commit()
 
-        # If real Paystack key is supplied (starts with 'sk_live_' or 'sk_test_' and not default mock), call Paystack API
-        if self.secret_key and not self.secret_key.startswith("sk_test_axion_sovereign_mock"):
+        # If real Paystack key is supplied (starts with 'sk_live_' or valid 'sk_test_'), call Paystack API
+        is_real_key = bool(self.secret_key and not "mock" in self.secret_key.lower() and (self.secret_key.startswith("sk_live_") or self.secret_key.startswith("sk_test_")))
+        if is_real_key:
             try:
                 headers = {
                     "Authorization": f"Bearer {self.secret_key}",
@@ -55,7 +56,7 @@ class PaystackService:
                     "email": user_email,
                     "amount": int(amount_ngn * 100), # Paystack accepts amount in kobo
                     "reference": reference,
-                    "callback_url": callback_url,
+                    "callback_url": callback_url or f"{settings.APP_URL}/console/billing",
                     "metadata": {"wallet_id": wallet.id, "user_id": user_id}
                 }
                 async with httpx.AsyncClient() as client:
@@ -81,7 +82,8 @@ class PaystackService:
 
     async def verify_with_paystack_api(self, reference: str) -> Dict[str, Any]:
         """Queries Paystack API directly to verify transaction status."""
-        if not self.secret_key or self.secret_key.startswith("sk_test_axion_sovereign_mock"):
+        is_real_key = bool(self.secret_key and not "mock" in self.secret_key.lower() and (self.secret_key.startswith("sk_live_") or self.secret_key.startswith("sk_test_")))
+        if not is_real_key:
             return {"status": "success", "amount_ngn": 0, "mock": True}
         try:
             headers = {

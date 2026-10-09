@@ -7,7 +7,7 @@ from backend.core.config import settings
 from backend.core.database import get_db
 from backend.core.deps import get_gateway_auth
 from backend.core.redis import redis_manager
-from backend.core.exceptions import RateLimitExceededException, AxionGatewayException
+from backend.core.exceptions import RateLimitExceededException, IndunixGatewayException, AxionGatewayException
 from backend.models.user import User
 from backend.models.api_key import ApiKey
 from backend.schemas.gateway import (
@@ -22,7 +22,7 @@ router = APIRouter(prefix="/v1", tags=["OpenAI Compatible Gateway"])
 
 @router.get("/models", response_model=ModelListResponse)
 async def list_models():
-    """Lists available Axion sovereign models (OpenAI compatible)."""
+    """Lists available Indunix AI sovereign models (OpenAI compatible)."""
     models = []
     for model_id, meta in settings.RATE_CARD_NGN.items():
         models.append(
@@ -38,10 +38,10 @@ async def list_models():
 
 @router.get("/models/{model_id}", response_model=ModelDescriptor)
 async def get_model(model_id: str):
-    """Retrieves metadata for a specific Axion model."""
+    """Retrieves metadata for a specific Indunix model."""
     meta = settings.RATE_CARD_NGN.get(model_id)
     if not meta:
-        raise AxionGatewayException(f"The model '{model_id}' does not exist", status_code=404, error_type="invalid_request_error")
+        raise IndunixGatewayException(f"The model '{model_id}' does not exist", status_code=404, error_type="invalid_request_error")
     return ModelDescriptor(
         id=model_id,
         root=model_id,
