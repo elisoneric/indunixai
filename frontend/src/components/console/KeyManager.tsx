@@ -13,6 +13,8 @@ export const KeyManager: React.FC<KeyManagerProps> = ({ keys, onRefresh }) => {
   const [name, setName] = useState('');
   const [monthlyLimit, setMonthlyLimit] = useState<string>('');
   const [loading, setLoading] = useState(false);
+  const [keyError, setKeyError] = useState<string | null>(null);
+  const [keyToRevoke, setKeyToRevoke] = useState<string | null>(null);
   
   // Secret Reveal Modal (shown exactly once!)
   const [secretResult, setSecretResult] = useState<CreatedApiKeyResponse | null>(null);
@@ -22,6 +24,7 @@ export const KeyManager: React.FC<KeyManagerProps> = ({ keys, onRefresh }) => {
     e.preventDefault();
     if (!name.trim()) return;
     setLoading(true);
+    setKeyError(null);
 
     try {
       const limitVal = monthlyLimit ? parseFloat(monthlyLimit) : undefined;
@@ -32,7 +35,7 @@ export const KeyManager: React.FC<KeyManagerProps> = ({ keys, onRefresh }) => {
       setMonthlyLimit('');
       onRefresh();
     } catch (err: any) {
-      alert(err.message || 'Failed to create key');
+      setKeyError(err.message || 'Failed to create key');
     } finally {
       setLoading(false);
     }
@@ -40,20 +43,23 @@ export const KeyManager: React.FC<KeyManagerProps> = ({ keys, onRefresh }) => {
 
   const handleToggle = async (id: string) => {
     try {
+      setKeyError(null);
       await api.toggleKey(id);
       onRefresh();
     } catch (err: any) {
-      alert(err.message);
+      setKeyError(err.message || 'Failed to update key status');
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to permanently revoke this key?')) return;
+  const confirmRevokeKey = async () => {
+    if (!keyToRevoke) return;
     try {
-      await api.deleteKey(id);
+      setKeyError(null);
+      await api.deleteKey(keyToRevoke);
+      setKeyToRevoke(null);
       onRefresh();
     } catch (err: any) {
-      alert(err.message);
+      setKeyError(err.message || 'Failed to revoke key');
     }
   };
 
@@ -67,6 +73,14 @@ export const KeyManager: React.FC<KeyManagerProps> = ({ keys, onRefresh }) => {
 
   return (
     <div className="space-y-6 animate-fadeIn">
+      {/* Inline Error Banner */}
+      {keyError && (
+        <div className="p-3.5 rounded-xl bg-red-950/40 border border-red-500/30 text-xs text-red-200 flex items-center justify-between">
+          <span>{keyError}</span>
+          <button onClick={() => setKeyError(null)} className="text-red-400 hover:text-white font-bold ml-3">✕</button>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -145,7 +159,7 @@ export const KeyManager: React.FC<KeyManagerProps> = ({ keys, onRefresh }) => {
                         <Power className="w-3.5 h-3.5" />
                       </button>
                       <button
-                        onClick={() => handleDelete(k.id)}
+                        onClick={() => setKeyToRevoke(k.id)}
                         title="Delete Key Permanently"
                         className="p-1.5 rounded-lg bg-red-950/60 hover:bg-red-900/80 text-red-400 hover:text-red-200 transition-colors"
                       >
@@ -266,6 +280,37 @@ export const KeyManager: React.FC<KeyManagerProps> = ({ keys, onRefresh }) => {
             >
               I Have Saved My Secret Key Securely
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Confirm Key Revocation */}
+      {keyToRevoke && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fadeIn">
+          <div className="w-full max-w-sm bg-[#0E131F] border border-red-500/30 rounded-2xl p-6 shadow-2xl">
+            <div className="flex items-center gap-3 text-red-400 mb-3">
+              <ShieldAlert className="w-6 h-6 shrink-0" />
+              <h3 className="font-heading text-lg font-bold text-white">Revoke API Key?</h3>
+            </div>
+            <p className="text-xs text-slate-400 mb-6 leading-relaxed">
+              Any application or script using this API key will immediately receive 401 Unauthorized responses. This action cannot be reversed.
+            </p>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setKeyToRevoke(null)}
+                className="flex-1 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold"
+              >
+                Keep Key
+              </button>
+              <button
+                type="button"
+                onClick={confirmRevokeKey}
+                className="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white text-xs font-bold shadow-md shadow-red-600/30"
+              >
+                Revoke Now
+              </button>
+            </div>
           </div>
         </div>
       )}

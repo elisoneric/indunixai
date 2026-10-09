@@ -41,7 +41,10 @@ class Settings(BaseSettings):
     ENTERPRISE_LEASE_SIGNING_KEY: str = Field(default="indunix-edge-ent-master-sig-key-2026", validation_alias="ENTERPRISE_LEASE_SIGNING_KEY")
     
     # Social OAuth (Google Sign-In)
-    GOOGLE_CLIENT_ID: Optional[str] = Field(default=None, validation_alias="GOOGLE_CLIENT_ID")
+    GOOGLE_CLIENT_ID: Optional[str] = Field(
+        default="200127368906-nm76siltlis1m4rk45h77kks71mp77f1.apps.googleusercontent.com",
+        validation_alias="GOOGLE_CLIENT_ID"
+    )
     
     # SMTP Email Configuration (cPanel / Roundcube Webmail compatible)
     SMTP_HOST: Optional[str] = Field(default=None, validation_alias="SMTP_HOST")

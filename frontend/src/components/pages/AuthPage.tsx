@@ -27,8 +27,9 @@ export const AuthPage: React.FC<AuthPageProps> = ({
   const [companyName, setCompanyName] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const DEFAULT_GOOGLE_CLIENT_ID = '200127368906-nm76siltlis1m4rk45h77kks71mp77f1.apps.googleusercontent.com';
   const [googleLoading, setGoogleLoading] = useState(false);
-  const [googleClientId, setGoogleClientId] = useState<string>('');
+  const [googleClientId, setGoogleClientId] = useState<string>(DEFAULT_GOOGLE_CLIENT_ID);
   const [error, setError] = useState<string | null>(null);
 
   // Discover Google Client ID from backend or env
@@ -36,11 +37,38 @@ export const AuthPage: React.FC<AuthPageProps> = ({
     let active = true;
     api.getAuthConfig().then((cfg) => {
       if (!active) return;
-      const cid = cfg.google_client_id || (import.meta as any).env.VITE_GOOGLE_CLIENT_ID || '';
+      const cid = cfg.google_client_id || (import.meta as any).env.VITE_GOOGLE_CLIENT_ID || DEFAULT_GOOGLE_CLIENT_ID;
       setGoogleClientId(cid);
     }).catch(() => {});
     return () => { active = false; };
   }, []);
+
+  const ensureGoogleScript = (): Promise<boolean> => {
+    if ((window as any).google?.accounts?.oauth2 || (window as any).google?.accounts?.id) {
+      return Promise.resolve(true);
+    }
+    return new Promise((resolve) => {
+      let script = document.querySelector('script[src*="accounts.google.com/gsi/client"]') as HTMLScriptElement;
+      if (!script) {
+        script = document.createElement('script');
+        script.src = 'https://accounts.google.com/gsi/client';
+        script.async = true;
+        script.defer = true;
+        document.head.appendChild(script);
+      }
+      let elapsed = 0;
+      const interval = setInterval(() => {
+        elapsed += 100;
+        if ((window as any).google?.accounts?.oauth2 || (window as any).google?.accounts?.id) {
+          clearInterval(interval);
+          resolve(true);
+        } else if (elapsed >= 3000) {
+          clearInterval(interval);
+          resolve(false);
+        }
+      }, 100);
+    });
+  };
 
   const handleModeChange = (newMode: 'login' | 'register') => {
     setMode(newMode);
@@ -75,27 +103,30 @@ export const AuthPage: React.FC<AuthPageProps> = ({
 
   const handleGoogleSignIn = async () => {
     setError(null);
-    const cid = googleClientId || (import.meta as any).env.VITE_GOOGLE_CLIENT_ID;
+    setGoogleLoading(true);
 
-    // 1. If Google Client ID and Google OAuth2 are loaded, open Google native popup
-    if (cid && (window as any).google?.accounts?.oauth2) {
-      setGoogleLoading(true);
-      try {
+    try {
+      await ensureGoogleScript();
+      const cid = googleClientId || (import.meta as any).env.VITE_GOOGLE_CLIENT_ID || DEFAULT_GOOGLE_CLIENT_ID;
+
+      // 1. Google OAuth2 Token Client (Interactive popup to choose Google account)
+      if ((window as any).google?.accounts?.oauth2) {
         const client = (window as any).google.accounts.oauth2.initTokenClient({
           client_id: cid,
           scope: 'email profile openid',
           callback: async (tokenResponse: any) => {
             if (tokenResponse.error) {
               setGoogleLoading(false);
-              setError(tokenResponse.error_description || 'Google sign-in was cancelled or failed.');
+              if (tokenResponse.error !== 'access_denied') {
+                setError('Google sign-in could not be completed. Please try again or use your email.');
+              }
               return;
             }
             try {
-              // Fetch Google user profile
               const userRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
                 headers: { Authorization: `Bearer ${tokenResponse.access_token}` }
               });
-              if (!userRes.ok) throw new Error('Unable to fetch Google user profile.');
+              if (!userRes.ok) throw new Error('Unable to retrieve profile from Google.');
               const gProfile = await userRes.json();
               await api.googleAuth({
                 email: gProfile.email,
@@ -104,41 +135,44 @@ export const AuthPage: React.FC<AuthPageProps> = ({
               });
               onSuccess();
             } catch (authErr: any) {
-              setError(authErr.message || 'Failed to complete Google authentication.');
+              setError(authErr.message || 'Google authentication failed. Please try again.');
             } finally {
               setGoogleLoading(false);
             }
           },
         });
-        client.requestAccessToken({ prompt: 'consent' });
-      } catch (err: any) {
-        setGoogleLoading(false);
-        setError('Error initializing Google login: ' + (err.message || String(err)));
+        client.requestAccessToken({ prompt: 'select_account' });
+        return;
       }
-      return;
-    }
 
-    // 2. If Google Client ID is not yet configured, provide seamless developer fallback
-    setGoogleLoading(true);
-    try {
-      const targetEmail = email.trim() || prompt(
-        "Google Client ID is not configured yet in Coolify/environment.\nEnter your Google email to test account creation & ₦1,000 credit grant:",
-        "developer@indunixai.com"
-      );
-      if (!targetEmail) {
+      // 2. Google Identity Services ID token fallback
+      if ((window as any).google?.accounts?.id) {
+        (window as any).google.accounts.id.initialize({
+          client_id: cid,
+          callback: async (response: any) => {
+            if (response?.credential) {
+              try {
+                await api.googleAuth({ credential: response.credential });
+                onSuccess();
+              } catch (authErr: any) {
+                setError(authErr.message || 'Google sign-in failed.');
+              } finally {
+                setGoogleLoading(false);
+              }
+            }
+          },
+        });
+        (window as any).google.accounts.id.prompt();
         setGoogleLoading(false);
         return;
       }
 
-      await api.googleAuth({
-        email: targetEmail,
-        full_name: fullName.trim() || targetEmail.split('@')[0],
-      });
-      onSuccess();
-    } catch (err: any) {
-      setError(err.message || 'Google authentication failed. Please try again or use email.');
-    } finally {
+      // 3. Clean inline error if Google services couldn't be loaded (e.g. adblocker)
       setGoogleLoading(false);
+      setError('Unable to reach Google authentication service. Please check your network or sign in with email.');
+    } catch (err: any) {
+      setGoogleLoading(false);
+      setError('Google Sign-In is temporarily unavailable. Please sign in with email.');
     }
   };
 

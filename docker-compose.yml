@@ -40,7 +40,7 @@ services:
       - SMTP_USE_SSL=${SMTP_USE_SSL:-true}
       - SMTP_USE_TLS=${SMTP_USE_TLS:-false}
       - ADMIN_NOTIFICATION_EMAIL=${ADMIN_NOTIFICATION_EMAIL:-system@indunixai.com}
-      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-200127368906-nm76siltlis1m4rk45h77kks71mp77f1.apps.googleusercontent.com}
     depends_on:
       postgres:
         condition: service_healthy
