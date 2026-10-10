@@ -165,6 +165,18 @@ export interface DepositFeeSettings {
   fx_rate_usd_ngn: number;
 }
 
+export interface AdminSmtpSettings {
+  host?: string;
+  port: number;
+  user?: string;
+  password?: string;
+  from_email: string;
+  from_name: string;
+  use_ssl: boolean;
+  use_tls: boolean;
+  is_configured: boolean;
+}
+
 export interface AdminFinancialReport {
   gross_inflow_ngn: number;
   gateway_fees_ngn: number;
@@ -832,6 +844,64 @@ export const api = {
       headers: getAdminAuthHeader(),
     });
     if (!res.ok) throw new Error('Failed to refresh DeepSeek balance');
+    return res.json();
+  },
+
+  async getAdminSmtp(): Promise<AdminSmtpSettings> {
+    const res = await fetch(`${API_BASE}/api/admin/smtp`, {
+      headers: getAdminAuthHeader(),
+    });
+    if (!res.ok) throw new Error('Failed to load SMTP settings');
+    return res.json();
+  },
+
+  async updateAdminSmtp(payload: Partial<AdminSmtpSettings>): Promise<AdminSmtpSettings> {
+    const res = await fetch(`${API_BASE}/api/admin/smtp`, {
+      method: 'POST',
+      headers: { ...getAdminAuthHeader(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Failed to update SMTP settings');
+    }
+    return res.json();
+  },
+
+  async testAdminSmtp(recipientEmail?: string): Promise<{ success: boolean; message: string; recipient: string }> {
+    const res = await fetch(`${API_BASE}/api/admin/smtp/test`, {
+      method: 'POST',
+      headers: { ...getAdminAuthHeader(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(recipientEmail ? { recipient_email: recipientEmail.trim() } : {}),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'SMTP test execution failed');
+    }
+    return res.json();
+  },
+
+  async resendAdminReceipt(reference: string): Promise<{ success: boolean; message: string }> {
+    const res = await fetch(`${API_BASE}/api/admin/smtp/resend-receipt/${encodeURIComponent(reference)}`, {
+      method: 'POST',
+      headers: getAdminAuthHeader(),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Failed to re-dispatch receipt');
+    }
+    return res.json();
+  },
+
+  async resendUserReceipt(reference: string): Promise<{ status: string; message: string }> {
+    const res = await fetch(`${API_BASE}/api/billing/resend-receipt/${encodeURIComponent(reference)}`, {
+      method: 'POST',
+      headers: getAuthHeader(),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Failed to dispatch receipt to email');
+    }
     return res.json();
   },
 };

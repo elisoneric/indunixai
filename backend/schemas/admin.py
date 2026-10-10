@@ -142,3 +142,27 @@ class AdminFinancialReport(BaseModel):
 
     # Per-Model Breakdown
     model_economics: List[ModelUnitEconomics]
+
+class AdminSmtpSettings(BaseModel):
+    host: Optional[str] = None
+    port: int = 465
+    user: Optional[str] = None
+    password: Optional[str] = None  # Masked when returned
+    from_email: str = "notifications@indunixai.com"
+    from_name: str = "Indunix AI"
+    use_ssl: bool = True
+    use_tls: bool = False
+    is_configured: bool = False
+
+class AdminSmtpUpdateRequest(BaseModel):
+    host: str
+    port: int = 465
+    user: str
+    password: Optional[str] = None
+    from_email: Optional[str] = "notifications@indunixai.com"
+    from_name: Optional[str] = "Indunix AI"
+    use_ssl: Optional[bool] = True
+    use_tls: Optional[bool] = False
+
+class AdminSmtpTestRequest(BaseModel):
+    recipient_email: Optional[str] = None

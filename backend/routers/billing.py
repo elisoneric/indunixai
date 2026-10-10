@@ -348,3 +348,36 @@ async def list_transactions(user: User = Depends(get_current_user), db: AsyncSes
     )
     txs = tx_res.scalars().all()
     return [TransactionOut.model_validate(t) for t in txs]
+
+@router.post("/resend-receipt/{reference}")
+async def user_resend_receipt(
+    reference: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Allows user to request immediate re-dispatch of their transaction receipt to their email."""
+    wallet_res = await db.execute(select(Wallet).where(Wallet.user_id == user.id))
+    wallet = wallet_res.scalar_one_or_none()
+    if not wallet:
+        raise HTTPException(status_code=404, detail="Wallet not found")
+
+    tx_res = await db.execute(
+        select(Transaction).where(Transaction.reference == reference, Transaction.wallet_id == wallet.id)
+    )
+    tx = tx_res.scalar_one_or_none()
+    if not tx or tx.status != TransactionStatus.SUCCESS:
+        raise HTTPException(status_code=404, detail="Transaction not found or not yet successful")
+
+    from backend.services.email_service import email_service
+    email_service.send_payment_receipt_email(
+        to_email=user.email,
+        full_name=user.full_name,
+        amount_ngn=float(tx.amount_ngn),
+        reference=tx.reference,
+        new_balance_ngn=float(wallet.balance_ngn),
+        channel=tx.channel or "BANK_TRANSFER"
+    )
+    return {
+        "status": "success",
+        "message": f"Payment receipt for ₦{float(tx.amount_ngn):,.2f} has been dispatched to {user.email}."
+    }

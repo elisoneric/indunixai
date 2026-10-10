@@ -30,6 +30,9 @@ from backend.schemas.admin import (
     DeepSeekLiveBalance,
     DepositFeeSettings,
     AdminFinancialReport,
+    AdminSmtpSettings,
+    AdminSmtpUpdateRequest,
+    AdminSmtpTestRequest,
 )
 from backend.services.email_service import email_service
 
@@ -840,3 +843,136 @@ async def refresh_deepseek_balance_endpoint(
     fee_setting = await db.get(SystemSetting, "deposit_fee_settings")
     fx_rate = fee_setting.value_json.get("fx_rate_usd_ngn", 1500.0) if fee_setting and fee_setting.value_json else 1500.0
     return await fetch_deepseek_balance(fx_rate)
+
+# =========================================================================
+# 7. SMTP & Outbound Email Configuration Gate
+# =========================================================================
+
+@router.get("/smtp", response_model=AdminSmtpSettings)
+async def get_admin_smtp_settings(
+    user: User = Depends(get_current_admin_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Retrieves active SMTP mail server settings (passwords masked for security)."""
+    setting = await db.get(SystemSetting, "smtp_settings")
+    cfg = setting.value_json if setting and setting.value_json else {}
+
+    host = cfg.get("host") or email_service.host or settings.SMTP_HOST
+    port = int(cfg.get("port") or email_service.port or settings.SMTP_PORT or 465)
+    user_addr = cfg.get("user") or email_service.user or settings.SMTP_USER
+    raw_pass = cfg.get("password") or email_service.password or settings.SMTP_PASSWORD
+    from_email = cfg.get("from_email") or email_service.from_email or settings.SMTP_FROM_EMAIL or "notifications@indunixai.com"
+    from_name = cfg.get("from_name") or email_service.from_name or settings.SMTP_FROM_NAME or "Indunix AI"
+    use_ssl = cfg.get("use_ssl", email_service.use_ssl if email_service.use_ssl is not None else settings.SMTP_USE_SSL)
+    use_tls = cfg.get("use_tls", email_service.use_tls if email_service.use_tls is not None else settings.SMTP_USE_TLS)
+
+    is_configured = bool(host and user_addr and raw_pass)
+    masked_pass = mask_key(raw_pass) if raw_pass else None
+
+    return AdminSmtpSettings(
+        host=host,
+        port=port,
+        user=user_addr,
+        password=masked_pass,
+        from_email=from_email,
+        from_name=from_name,
+        use_ssl=use_ssl,
+        use_tls=use_tls,
+        is_configured=is_configured
+    )
+
+@router.post("/smtp", response_model=AdminSmtpSettings)
+async def update_admin_smtp_settings(
+    payload: AdminSmtpUpdateRequest,
+    user: User = Depends(get_current_admin_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Saves new SMTP mail server credentials and updates runtime email service dynamically."""
+    setting = await db.get(SystemSetting, "smtp_settings")
+    current_cfg = setting.value_json if setting and setting.value_json else {}
+
+    # If password was not passed or left masked, retain previous password
+    new_password = payload.password
+    if not new_password or new_password.startswith("••••") or "••••" in new_password:
+        new_password = current_cfg.get("password") or email_service.password or settings.SMTP_PASSWORD
+
+    cfg_data = {
+        "host": payload.host.strip(),
+        "port": payload.port,
+        "user": payload.user.strip(),
+        "password": new_password,
+        "from_email": (payload.from_email or "notifications@indunixai.com").strip(),
+        "from_name": (payload.from_name or "Indunix AI").strip(),
+        "use_ssl": payload.use_ssl if payload.use_ssl is not None else True,
+        "use_tls": payload.use_tls if payload.use_tls is not None else False
+    }
+
+    if not setting:
+        setting = SystemSetting(key="smtp_settings", value_json=cfg_data)
+        db.add(setting)
+    else:
+        setting.value_json = cfg_data
+
+    await db.commit()
+
+    # Update runtime email service immediately
+    email_service.update_config(cfg_data)
+
+    is_configured = bool(cfg_data["host"] and cfg_data["user"] and cfg_data["password"])
+    return AdminSmtpSettings(
+        host=cfg_data["host"],
+        port=cfg_data["port"],
+        user=cfg_data["user"],
+        password=mask_key(new_password),
+        from_email=cfg_data["from_email"],
+        from_name=cfg_data["from_name"],
+        use_ssl=cfg_data["use_ssl"],
+        use_tls=cfg_data["use_tls"],
+        is_configured=is_configured
+    )
+
+@router.post("/smtp/test")
+async def test_admin_smtp(
+    payload: AdminSmtpTestRequest,
+    user: User = Depends(get_current_admin_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Sends a live test verification email to confirm delivery."""
+    recipient = (payload.recipient_email or user.email).strip()
+    success, message = email_service.test_connection(recipient)
+    return {"success": success, "message": message, "recipient": recipient}
+
+@router.post("/smtp/resend-receipt/{reference}")
+async def resend_deposit_receipt(
+    reference: str,
+    user: User = Depends(get_current_admin_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Re-dispatches an Indunix branded invoice receipt email for an existing successful transaction."""
+    tx_res = await db.execute(select(Transaction).where(Transaction.reference == reference))
+    tx = tx_res.scalar_one_or_none()
+    if not tx or tx.status != TransactionStatus.SUCCESS:
+        raise HTTPException(status_code=404, detail="Successful transaction reference not found")
+
+    wallet_res = await db.execute(select(Wallet).where(Wallet.id == tx.wallet_id))
+    wallet = wallet_res.scalar_one_or_none()
+    if not wallet:
+        raise HTTPException(status_code=404, detail="Wallet not found")
+
+    target_user_res = await db.execute(select(User).where(User.id == wallet.user_id))
+    target_user = target_user_res.scalar_one_or_none()
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User associated with transaction not found")
+
+    email_service.send_payment_receipt_email(
+        to_email=target_user.email,
+        full_name=target_user.full_name,
+        amount_ngn=float(tx.amount_ngn),
+        reference=tx.reference,
+        new_balance_ngn=float(wallet.balance_ngn),
+        channel=tx.channel or "BANK_TRANSFER"
+    )
+    return {
+        "success": True,
+        "message": f"Payment receipt for ₦{float(tx.amount_ngn):,.2f} dispatched to {target_user.email}."
+    }

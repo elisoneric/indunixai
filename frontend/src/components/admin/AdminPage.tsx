@@ -35,6 +35,7 @@ import {
   Scale,
   Receipt,
   ShieldCheck,
+  Mail,
 } from 'lucide-react';
 import {
   api,
@@ -44,6 +45,7 @@ import {
   AdminModelPricingItem,
   AdminFinancialReport,
   DeepSeekLiveBalance,
+  AdminSmtpSettings,
 } from '../../api/client';
 import { formatNaira } from '../../utils/formatters';
 
@@ -70,7 +72,19 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigateHome }) => {
   const [changePasswordError, setChangePasswordError] = useState<string | null>(null);
 
   // Active Tab
-  const [activeTab, setActiveTab] = useState<'metrics' | 'financials' | 'users' | 'pricing' | 'promos' | 'gateway'>('metrics');
+  const [activeTab, setActiveTab] = useState<'metrics' | 'financials' | 'users' | 'pricing' | 'promos' | 'gateway' | 'smtp'>('metrics');
+
+  // SMTP Mail Server State
+  const [smtpSettings, setSmtpSettings] = useState<AdminSmtpSettings | null>(null);
+  const [smtpLoading, setSmtpLoading] = useState<boolean>(false);
+  const [smtpSaving, setSmtpSaving] = useState<boolean>(false);
+  const [smtpTesting, setSmtpTesting] = useState<boolean>(false);
+  const [testRecipient, setTestRecipient] = useState<string>('');
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [showSmtpPassword, setShowSmtpPassword] = useState<boolean>(false);
+  const [resendRef, setResendRef] = useState<string>('');
+  const [resendingReceipt, setResendingReceipt] = useState<boolean>(false);
+  const [resendResult, setResendResult] = useState<{ success: boolean; message: string } | null>(null);
 
   // Financials & Economics State
   const [financials, setFinancials] = useState<AdminFinancialReport | null>(null);
@@ -151,6 +165,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigateHome }) => {
     loadPricing();
     loadPromos();
     loadGatewayConfig();
+    loadSmtpSettings();
   };
 
   const loadFinancials = async () => {
@@ -383,6 +398,77 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigateHome }) => {
       showToast('error', err.message || 'Failed to update gateway credentials');
     } finally {
       setGatewaySaving(false);
+    }
+  };
+
+  // Load SMTP Settings
+  const loadSmtpSettings = async () => {
+    setSmtpLoading(true);
+    try {
+      const res = await api.getAdminSmtp();
+      setSmtpSettings(res);
+      if (!testRecipient && adminUser?.email) {
+        setTestRecipient(adminUser.email);
+      }
+    } catch {
+      // Ignored
+    } finally {
+      setSmtpLoading(false);
+    }
+  };
+
+  // Save SMTP Settings
+  const handleSaveSmtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!smtpSettings) return;
+    setSmtpSaving(true);
+    setTestResult(null);
+    try {
+      const res = await api.updateAdminSmtp(smtpSettings);
+      setSmtpSettings(res);
+      showToast('success', 'SMTP mail server configuration saved and active.');
+    } catch (err: any) {
+      showToast('error', err.message || 'Failed to update SMTP settings');
+    } finally {
+      setSmtpSaving(false);
+    }
+  };
+
+  // Test SMTP Delivery
+  const handleTestSmtp = async () => {
+    setSmtpTesting(true);
+    setTestResult(null);
+    try {
+      const res = await api.testAdminSmtp(testRecipient || undefined);
+      setTestResult({ success: res.success, message: res.message });
+      if (res.success) {
+        showToast('success', 'Test email dispatched successfully.');
+      } else {
+        showToast('error', res.message || 'Failed to dispatch test email.');
+      }
+    } catch (err: any) {
+      setTestResult({ success: false, message: err.message || 'SMTP test execution failed' });
+      showToast('error', err.message || 'SMTP test execution failed');
+    } finally {
+      setSmtpTesting(false);
+    }
+  };
+
+  // Resend Receipt for Transaction
+  const handleResendReceipt = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!resendRef.trim()) return;
+    setResendingReceipt(true);
+    setResendResult(null);
+    try {
+      const res = await api.resendAdminReceipt(resendRef.trim());
+      setResendResult(res);
+      showToast('success', res.message);
+    } catch (err: any) {
+      setResendResult({ success: false, message: err.message || 'Failed to dispatch receipt' });
+      showToast('error', err.message || 'Failed to dispatch receipt');
+    } finally {
+      setResendingReceipt(false);
     }
   };
 
@@ -698,6 +784,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigateHome }) => {
             { id: 'pricing', label: 'Model Pricing Control', icon: Sliders },
             { id: 'promos', label: 'Promos & Campaign Engine', icon: Megaphone },
             { id: 'gateway', label: 'Gateway Keys & Providers', icon: Key },
+            { id: 'smtp', label: 'Outbound Mail & Receipts', icon: Mail },
           ].map((item) => {
             const Icon = item.icon;
             const isSel = activeTab === item.id;
@@ -1619,6 +1706,307 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigateHome }) => {
                   </button>
                 </div>
               </form>
+            </div>
+          )}
+
+          {/* TAB 7: OUTBOUND MAIL & INVOICING GATEWAY (SMTP) */}
+          {activeTab === 'smtp' && (
+            <div className="space-y-6">
+              {/* Header Card */}
+              <div className="p-6 rounded-2xl bg-[#0D121F] border border-slate-800 shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex items-start gap-3.5">
+                  <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 shrink-0">
+                    <Mail className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h2 className="font-heading text-lg font-bold text-white flex items-center gap-2">
+                      Outbound Mail & Invoicing Server
+                    </h2>
+                    <p className="text-xs text-slate-400 mt-1 max-w-xl">
+                      Configure your enterprise cPanel, Google Workspace, or custom SMTP gateway. All deposit receipts, security notices, and welcome starter credits are dispatched through this server.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  {smtpSettings?.is_configured ? (
+                    <span className="px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center gap-1.5">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span>Mail Server Configured</span>
+                    </span>
+                  ) : (
+                    <span className="px-3 py-1.5 rounded-xl text-xs font-bold bg-amber-500/10 text-amber-400 border border-amber-500/30 flex items-center gap-1.5">
+                      <AlertTriangle className="w-3.5 h-3.5" />
+                      <span>Missing Mail Credentials</span>
+                    </span>
+                  )}
+                  <button
+                    onClick={loadSmtpSettings}
+                    disabled={smtpLoading}
+                    className="p-2 rounded-xl bg-slate-900 border border-slate-800 text-slate-400 hover:text-white transition-colors"
+                    title="Refresh Settings"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${smtpLoading ? 'animate-spin' : ''}`} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Paystack Exclusive Delivery Notice */}
+              <div className="p-4 rounded-2xl bg-sky-500/10 border border-sky-500/30 text-sky-200 text-xs flex items-start gap-3">
+                <ShieldCheck className="w-5 h-5 text-sky-400 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <span className="font-bold text-white block">How to Stop Paystack from Sending Receipts to Users</span>
+                  <p className="text-[11px] text-sky-300 leading-relaxed">
+                    By default, Paystack sends its own generic receipts to customers. To ensure users receive only Indunix AI branded invoice receipts:
+                    log in to your <strong>Paystack Dashboard &rarr; Settings &rarr; Preferences</strong>, scroll to <strong>Transaction Emails</strong>, and uncheck <strong>"Send payment receipt to the customer for successful transactions"</strong>.
+                  </p>
+                </div>
+              </div>
+
+              {/* SMTP Credentials Form */}
+              <div className="p-6 rounded-2xl bg-[#0D121F] border border-slate-800 shadow-xl">
+                <h3 className="font-heading text-sm font-bold text-white mb-4 flex items-center gap-2">
+                  <Lock className="w-4 h-4 text-emerald-400" />
+                  SMTP Mail Server Configuration
+                </h3>
+
+                <form onSubmit={handleSaveSmtp} className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="sm:col-span-2">
+                      <label className="block text-xs font-medium text-slate-300 mb-1">
+                        SMTP Host / Server
+                      </label>
+                      <input
+                        type="text"
+                        value={smtpSettings?.host || ''}
+                        onChange={(e) => setSmtpSettings(prev => prev ? { ...prev, host: e.target.value } : null)}
+                        placeholder="e.g. mail.indunixai.com or smtp.gmail.com"
+                        required
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white text-xs outline-none focus:border-emerald-500 font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-300 mb-1">
+                        SMTP Port
+                      </label>
+                      <input
+                        type="number"
+                        value={smtpSettings?.port || 465}
+                        onChange={(e) => setSmtpSettings(prev => prev ? { ...prev, port: parseInt(e.target.value) || 465 } : null)}
+                        required
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white text-xs outline-none focus:border-emerald-500 font-mono"
+                      />
+                      <span className="text-[10px] text-slate-500 mt-1 block">465 (SSL) or 587 (TLS)</span>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-300 mb-1">
+                        SMTP Username / Email Address
+                      </label>
+                      <input
+                        type="email"
+                        value={smtpSettings?.user || ''}
+                        onChange={(e) => setSmtpSettings(prev => prev ? { ...prev, user: e.target.value } : null)}
+                        placeholder="e.g. notifications@indunixai.com"
+                        required
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white text-xs outline-none focus:border-emerald-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-300 mb-1">
+                        SMTP Password
+                      </label>
+                      <div className="relative">
+                        <input
+                          type={showSmtpPassword ? 'text' : 'password'}
+                          value={smtpSettings?.password || ''}
+                          onChange={(e) => setSmtpSettings(prev => prev ? { ...prev, password: e.target.value } : null)}
+                          placeholder={smtpSettings?.password ? '••••••••' : 'Enter cPanel email password'}
+                          className="w-full px-3.5 py-2.5 pr-10 rounded-xl bg-slate-950 border border-slate-800 text-white text-xs outline-none focus:border-emerald-500 font-mono"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowSmtpPassword(!showSmtpPassword)}
+                          className="absolute right-3 top-2.5 text-slate-500 hover:text-slate-300"
+                        >
+                          {showSmtpPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-300 mb-1">
+                        Sender From Address
+                      </label>
+                      <input
+                        type="email"
+                        value={smtpSettings?.from_email || ''}
+                        onChange={(e) => setSmtpSettings(prev => prev ? { ...prev, from_email: e.target.value } : null)}
+                        placeholder="notifications@indunixai.com"
+                        required
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white text-xs outline-none focus:border-emerald-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-300 mb-1">
+                        Sender Display Name
+                      </label>
+                      <input
+                        type="text"
+                        value={smtpSettings?.from_name || ''}
+                        onChange={(e) => setSmtpSettings(prev => prev ? { ...prev, from_name: e.target.value } : null)}
+                        placeholder="Indunix AI"
+                        required
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white text-xs outline-none focus:border-emerald-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-6 pt-2">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={smtpSettings?.use_ssl ?? true}
+                        onChange={(e) => setSmtpSettings(prev => prev ? { ...prev, use_ssl: e.target.checked } : null)}
+                        className="rounded border-slate-700 text-emerald-500 focus:ring-0"
+                      />
+                      <span className="text-xs text-slate-300 font-medium">Use SSL (Port 465 - recommended for cPanel)</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={smtpSettings?.use_tls ?? false}
+                        onChange={(e) => setSmtpSettings(prev => prev ? { ...prev, use_tls: e.target.checked } : null)}
+                        className="rounded border-slate-700 text-emerald-500 focus:ring-0"
+                      />
+                      <span className="text-xs text-slate-300 font-medium">Use TLS / STARTTLS (Port 587)</span>
+                    </label>
+                  </div>
+
+                  <div className="flex justify-end pt-4 border-t border-slate-800/80">
+                    <button
+                      type="submit"
+                      disabled={smtpSaving}
+                      className="px-6 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 font-bold text-xs shadow-xl transition-all"
+                    >
+                      {smtpSaving ? 'Saving Configuration...' : 'Save & Apply SMTP Configuration'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+
+              {/* Live Test & Re-dispatch Section */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Live Test Card */}
+                <div className="p-6 rounded-2xl bg-[#0D121F] border border-slate-800 shadow-xl space-y-4">
+                  <div>
+                    <h3 className="font-heading text-sm font-bold text-white flex items-center gap-2">
+                      <Send className="w-4 h-4 text-emerald-400" />
+                      Live Email Dispatch Test
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Send a verification test email to any inbox to confirm host connectivity and authentication.
+                    </p>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-300 mb-1">
+                        Recipient Email Address
+                      </label>
+                      <input
+                        type="email"
+                        value={testRecipient}
+                        onChange={(e) => setTestRecipient(e.target.value)}
+                        placeholder="your-email@example.com"
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white text-xs outline-none focus:border-emerald-500"
+                      />
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleTestSmtp}
+                      disabled={smtpTesting || !testRecipient.trim()}
+                      className="w-full py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs transition-all flex items-center justify-center gap-2 disabled:opacity-50 border border-slate-700"
+                    >
+                      <Send className={`w-3.5 h-3.5 text-emerald-400 ${smtpTesting ? 'animate-pulse' : ''}`} />
+                      <span>{smtpTesting ? 'Transmitting Test Message...' : 'Send Live Test Email'}</span>
+                    </button>
+
+                    {testResult && (
+                      <div className={`p-3 rounded-xl border text-xs flex items-start gap-2 ${
+                        testResult.success
+                          ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                          : 'bg-red-500/10 border-red-500/30 text-red-300'
+                      }`}>
+                        {testResult.success ? (
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                        ) : (
+                          <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                        )}
+                        <span>{testResult.message}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Re-dispatch Transaction Receipt Card */}
+                <div className="p-6 rounded-2xl bg-[#0D121F] border border-slate-800 shadow-xl space-y-4">
+                  <div>
+                    <h3 className="font-heading text-sm font-bold text-white flex items-center gap-2">
+                      <Receipt className="w-4 h-4 text-emerald-400" />
+                      Re-send Deposit Invoice Receipt
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Did a transfer succeed without an email? Enter the transaction reference to re-dispatch the official receipt.
+                    </p>
+                  </div>
+
+                  <form onSubmit={handleResendReceipt} className="space-y-3">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-300 mb-1">
+                        Transaction Reference
+                      </label>
+                      <input
+                        type="text"
+                        value={resendRef}
+                        onChange={(e) => setResendRef(e.target.value)}
+                        placeholder="e.g. T6281039823 or session reference"
+                        required
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white text-xs outline-none focus:border-emerald-500 font-mono"
+                      />
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={resendingReceipt || !resendRef.trim()}
+                      className="w-full py-2.5 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition-all flex items-center justify-center gap-2 disabled:opacity-50 shadow-lg shadow-emerald-500/20"
+                    >
+                      <Mail className={`w-3.5 h-3.5 ${resendingReceipt ? 'animate-pulse' : ''}`} />
+                      <span>{resendingReceipt ? 'Dispatching Receipt...' : 'Dispatch Receipt to User Now'}</span>
+                    </button>
+
+                    {resendResult && (
+                      <div className={`p-3 rounded-xl border text-xs flex items-start gap-2 ${
+                        resendResult.success
+                          ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                          : 'bg-red-500/10 border-red-500/30 text-red-300'
+                      }`}>
+                        {resendResult.success ? (
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                        ) : (
+                          <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                        )}
+                        <span>{resendResult.message}</span>
+                      </div>
+                    )}
+                  </form>
+                </div>
+              </div>
             </div>
           )}
         </main>

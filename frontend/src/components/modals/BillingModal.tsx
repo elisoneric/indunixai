@@ -13,6 +13,7 @@ import {
   AlertCircle,
   Download,
   ShieldAlert,
+  Mail,
 } from 'lucide-react';
 import { api, User } from '../../api/client';
 import { formatNaira } from '../../utils/formatters';
@@ -192,6 +193,22 @@ export const BillingModal: React.FC<BillingModalProps> = ({
     }
   };
 
+  const [resendingEmail, setResendingEmail] = useState(false);
+  const [emailSentNotice, setEmailSentNotice] = useState<string | null>(null);
+
+  const handleUserResendReceipt = async (ref: string) => {
+    setResendingEmail(true);
+    setEmailSentNotice(null);
+    try {
+      const res = await api.resendUserReceipt(ref);
+      setEmailSentNotice(res.message || 'Payment receipt email dispatched to your inbox.');
+    } catch (err: any) {
+      setError(err.message || 'Unable to dispatch receipt email at this time.');
+    } finally {
+      setResendingEmail(false);
+    }
+  };
+
   // Launch Paystack in New Tab and await confirmation
   const handlePaystackCheckout = async () => {
     if (amount < 1000) {
@@ -281,6 +298,16 @@ export const BillingModal: React.FC<BillingModalProps> = ({
               >
                 <Download className="w-4 h-4 text-emerald-400" />
                 <span>Download Official PDF Receipt</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleUserResendReceipt(successInfo.reference)}
+                disabled={resendingEmail}
+                className="w-full py-2.5 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white font-medium text-xs transition-all flex items-center justify-center gap-2 border border-slate-800 disabled:opacity-50"
+              >
+                <Mail className="w-4 h-4 text-emerald-400" />
+                <span>{resendingEmail ? 'Sending receipt to email...' : (emailSentNotice || 'Send Receipt to My Email')}</span>
               </button>
 
               <button

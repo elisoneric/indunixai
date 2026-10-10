@@ -24,6 +24,19 @@ async def lifespan(app: FastAPI):
     logger.info("Initializing Indunix Sovereign Infrastructure...")
     await init_db()
     await redis_manager.init()
+
+    # Load dynamic SMTP settings from database into email_service
+    try:
+        from backend.models.system_setting import SystemSetting
+        from backend.services.email_service import email_service
+        async with AsyncSessionLocal() as session:
+            smtp_setting = await session.get(SystemSetting, "smtp_settings")
+            if smtp_setting and smtp_setting.value_json:
+                email_service.update_config(smtp_setting.value_json)
+                logger.info("Loaded custom SMTP mail server configuration from database.")
+    except Exception as e:
+        logger.warning(f"Could not load custom SMTP configuration on startup: {e}")
+
     yield
     logger.info("Shutting down Indunix Gateway...")
 
