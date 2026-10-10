@@ -249,7 +249,7 @@ export const EnterpriseView: React.FC<EnterpriseViewProps> = ({ user }) => {
                       required
                       value={fullName}
                       onChange={(e) => setFullName(e.target.value)}
-                      placeholder="e.g. Dr. Adaeze Okafor"
+                      placeholder="Lead officer full name"
                       className="w-full px-3.5 py-2.5 bg-zinc-950 border border-white/[0.08] rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-emerald-500 transition-colors"
                     />
                   </div>
@@ -263,7 +263,7 @@ export const EnterpriseView: React.FC<EnterpriseViewProps> = ({ user }) => {
                       required
                       value={companyName}
                       onChange={(e) => setCompanyName(e.target.value)}
-                      placeholder="e.g. First Horizon Bank"
+                      placeholder="Enterprise legal entity name"
                       className="w-full px-3.5 py-2.5 bg-zinc-950 border border-white/[0.08] rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-emerald-500 transition-colors"
                     />
                   </div>
@@ -279,7 +279,7 @@ export const EnterpriseView: React.FC<EnterpriseViewProps> = ({ user }) => {
                       required
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      placeholder="e.g. ada@horizon.ng"
+                      placeholder="Official business email address"
                       className="w-full px-3.5 py-2.5 bg-zinc-950 border border-white/[0.08] rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-emerald-500 transition-colors"
                     />
                   </div>
@@ -293,7 +293,7 @@ export const EnterpriseView: React.FC<EnterpriseViewProps> = ({ user }) => {
                       required
                       value={phone}
                       onChange={(e) => setPhone(e.target.value)}
-                      placeholder="e.g. +234 803 123 4567"
+                      placeholder="Direct contact phone number"
                       className="w-full px-3.5 py-2.5 bg-zinc-950 border border-white/[0.08] rounded-xl text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-emerald-500 transition-colors"
                     />
                   </div>

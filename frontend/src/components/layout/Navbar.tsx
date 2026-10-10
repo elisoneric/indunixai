@@ -33,10 +33,6 @@ export const Navbar: React.FC<NavbarProps> = ({
           className="flex items-center gap-3 cursor-pointer group shrink-0 select-none"
         >
           <IndunixLogo size={32} showText textSize="text-lg" />
-          <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-white/[0.04] border border-white/[0.08] text-[10px] font-mono text-zinc-400">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            <span>Direct Naira Live</span>
-          </div>
         </div>
 
         {/* Center Nav Links - Grok/x.ai Single-row Clean Typography */}

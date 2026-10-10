@@ -512,5 +512,53 @@ class EmailService:
         html = self._build_html_wrapper(subject, "SECURITY ALERT", "#F59E0B", content_html)
         asyncio.create_task(self._send_async_email(to_email, subject, html, text_body))
 
+    def send_credit_granted_email(
+        self,
+        to_email: str,
+        full_name: str,
+        amount_ngn: float,
+        credit_type: str,
+        reason: str
+    ):
+        """Dispatched when system administrator awards bonus or cash credits to a user wallet."""
+        type_label = "Bonus Credits" if credit_type == "bonus" else "Direct Cash Balance"
+        subject = f"Credit Awarded: ₦{amount_ngn:,.2f} Added to Your Indunix Wallet"
+        timestamp = datetime.now(timezone.utc).strftime("%d %b %Y, %H:%M UTC")
+        content_html = f"""
+          <h2 style="color: #F8FAFC; margin-top: 0; font-size: 20px;">Wallet Credit Received</h2>
+          <p>Hello {full_name or 'Developer'}, an administrative credit adjustment of <strong>₦{amount_ngn:,.2f} NGN</strong> has been applied to your sovereign API wallet.</p>
+
+          <div class="card">
+            <h4 style="margin: 0 0 10px; color: #10B981; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px;">Credit Details</h4>
+            <table class="data-table">
+              <tr>
+                <td class="data-label">Credit Amount</td>
+                <td class="data-val" style="color: #10B981; font-size: 15px;">₦{amount_ngn:,.2f} NGN</td>
+              </tr>
+              <tr>
+                <td class="data-label">Type</td>
+                <td class="data-val">{type_label}</td>
+              </tr>
+              <tr>
+                <td class="data-label">Audit Reason</td>
+                <td class="data-val">{reason}</td>
+              </tr>
+              <tr>
+                <td class="data-label">Timestamp</td>
+                <td class="data-val">{timestamp}</td>
+              </tr>
+            </table>
+          </div>
+
+          <p style="font-size: 13px; color: #94A3B8;">
+            These credits can be used immediately across all sovereign AI model inference endpoints.
+          </p>
+
+          <a href="{settings.APP_URL}/console/billing" class="btn">View Ledger in Console &rarr;</a>
+        """
+        text_body = f"₦{amount_ngn:,.2f} {type_label} credited to your Indunix AI wallet. Reason: {reason}."
+        html = self._build_html_wrapper(subject, "CREDIT AWARDED", "#059669", content_html)
+        asyncio.create_task(self._send_async_email(to_email, subject, html, text_body))
+
 email_service = EmailService()
 

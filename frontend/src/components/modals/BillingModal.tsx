@@ -518,7 +518,7 @@ export const BillingModal: React.FC<BillingModalProps> = ({
                         type="tel"
                         value={phone}
                         onChange={(e) => setPhone(e.target.value)}
-                        placeholder="e.g. 08012345678"
+                        placeholder="Phone number"
                         required
                         className="w-full px-4 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs clean-nums text-white focus:outline-none focus:border-emerald-500 transition-colors"
                       />

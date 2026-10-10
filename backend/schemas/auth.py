@@ -22,11 +22,13 @@ class UserOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str
+    username: Optional[str] = None
     email: str
     full_name: str
     company_name: Optional[str] = None
     role: UserRole
     is_active: bool
+    must_change_password: bool = False
     created_at: datetime
 
 class ProfileUpdate(BaseModel):

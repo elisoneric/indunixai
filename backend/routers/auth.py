@@ -27,6 +27,30 @@ async def get_auth_public_config():
         "google_client_id": settings.GOOGLE_CLIENT_ID or ""
     }
 
+@router.get("/promotions")
+async def get_public_promotions(db: AsyncSession = Depends(get_db)):
+    """Public endpoint to fetch active promotional bonuses and announcement banner."""
+    from backend.models.system_setting import SystemSetting
+    setting = await db.get(SystemSetting, "promo_campaigns")
+    if setting and setting.value_json:
+        return setting.value_json
+    return {
+        "signup_bonus_ngn": 1000.0,
+        "sale_active": False,
+        "sale_title": "Developer Flash Sale",
+        "sale_discount_percent": 0.0,
+        "sale_ends_at": None,
+        "banner_active": False,
+        "banner_text": ""
+    }
+
+async def _get_signup_bonus(db: AsyncSession) -> float:
+    from backend.models.system_setting import SystemSetting
+    setting = await db.get(SystemSetting, "promo_campaigns")
+    if setting and setting.value_json:
+        return float(setting.value_json.get("signup_bonus_ngn", 1000.0))
+    return 1000.0
+
 @router.post("/register", response_model=Token, status_code=status.HTTP_201_CREATED)
 async def register(payload: UserRegister, db: AsyncSession = Depends(get_db)):
     # Check if user already exists
@@ -49,11 +73,14 @@ async def register(payload: UserRegister, db: AsyncSession = Depends(get_db)):
     db.add(new_user)
     await db.flush()
 
-    # Create Wallet with ₦1,000 Signup Bonus Credits
+    # Dynamic Signup Bonus Credits (configurable via /admin)
+    signup_bonus = await _get_signup_bonus(db)
+
+    # Create Wallet with Signup Bonus Credits
     wallet = Wallet(
         user_id=new_user.id,
         balance_ngn=0.0000,
-        bonus_credits_ngn=1000.0000,
+        bonus_credits_ngn=signup_bonus,
         currency="NGN"
     )
     db.add(wallet)
@@ -63,16 +90,16 @@ async def register(payload: UserRegister, db: AsyncSession = Depends(get_db)):
     promo_tx = Transaction(
         wallet_id=wallet.id,
         reference=f"indunix_promo_{uuid.uuid4().hex[:10]}",
-        amount_ngn=1000.00,
+        amount_ngn=signup_bonus,
         channel=TransactionChannel.PROMO_CREDIT.value,
         status=TransactionStatus.SUCCESS,
-        metadata_json={"description": "Welcome sign-up grant (₦1,000 API Credits)"}
+        metadata_json={"description": f"Welcome sign-up grant (₦{signup_bonus:,.2f} API Credits)"}
     )
     db.add(promo_tx)
     await db.commit()
     await db.refresh(new_user)
 
-    # Dispatch welcome email with ₦1,000 credit confirmation
+    # Dispatch welcome email with credit confirmation
     email_service.send_welcome_email(to_email=new_user.email, full_name=new_user.full_name)
 
     token = create_access_token(data={"sub": new_user.id, "email": new_user.email})
@@ -163,11 +190,12 @@ async def google_auth(payload: GoogleAuthRequest, request: Request, db: AsyncSes
         db.add(user)
         await db.flush()
 
-        # Create wallet with ₦1,000 Signup Bonus Credits
+        # Create wallet with Dynamic Signup Bonus Credits
+        signup_bonus = await _get_signup_bonus(db)
         wallet = Wallet(
             user_id=user.id,
             balance_ngn=0.0000,
-            bonus_credits_ngn=1000.0000,
+            bonus_credits_ngn=signup_bonus,
             currency="NGN"
         )
         db.add(wallet)
@@ -177,10 +205,10 @@ async def google_auth(payload: GoogleAuthRequest, request: Request, db: AsyncSes
         promo_tx = Transaction(
             wallet_id=wallet.id,
             reference=f"indunix_promo_{uuid.uuid4().hex[:10]}",
-            amount_ngn=1000.00,
+            amount_ngn=signup_bonus,
             channel=TransactionChannel.PROMO_CREDIT.value,
             status=TransactionStatus.SUCCESS,
-            metadata_json={"description": "Google Signup Grant (₦1,000 API Credits)"}
+            metadata_json={"description": f"Google Signup Grant (₦{signup_bonus:,.2f} API Credits)"}
         )
         db.add(promo_tx)
         await db.commit()

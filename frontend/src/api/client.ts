@@ -2,12 +2,53 @@ const API_BASE = ''; // Uses Vite proxy to FastAPI backend
 
 export interface User {
   id: string;
+  username?: string;
   email: string;
   full_name: string;
   company_name?: string;
   role: string;
   is_active: boolean;
+  must_change_password?: boolean;
   created_at: string;
+}
+
+export interface AdminUserItem {
+  id: string;
+  username?: string;
+  email: string;
+  full_name: string;
+  company_name?: string;
+  role: string;
+  is_active: boolean;
+  must_change_password: boolean;
+  created_at: string;
+  balance_ngn: number;
+  bonus_credits_ngn: number;
+  total_available_ngn: number;
+  is_frozen: boolean;
+  dedicated_account_number?: string;
+  dedicated_account_bank?: string;
+  total_api_keys: number;
+  total_tokens: number;
+  total_requests: number;
+}
+
+export interface AdminPromoCampaigns {
+  signup_bonus_ngn: number;
+  sale_active: boolean;
+  sale_title: string;
+  sale_discount_percent: number;
+  sale_ends_at?: string;
+  banner_active: boolean;
+  banner_text: string;
+}
+
+export interface AdminModelPricingItem {
+  name?: string;
+  prompt_per_million: number;
+  completion_per_million: number;
+  context_window?: number;
+  description?: string;
 }
 
 export interface Wallet {
@@ -92,6 +133,11 @@ export interface EnterpriseContract {
 
 function getAuthHeader(): Record<string, string> {
   const token = localStorage.getItem('indunix_token') || localStorage.getItem('axion_token');
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+function getAdminAuthHeader(): Record<string, string> {
+  const token = localStorage.getItem('indunix_admin_token') || localStorage.getItem('indunix_token') || localStorage.getItem('axion_token');
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 
@@ -501,9 +547,67 @@ export const api = {
   },
 
   // Admin Platform Management
+  async adminLogin(payload: { identifier: string; password: string }): Promise<{
+    access_token: string;
+    token_type: string;
+    must_change_password: boolean;
+    message: string;
+    user: User;
+  }> {
+    const res = await fetch(`${API_BASE}/api/admin/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Administrator login failed');
+    }
+    const data = await res.json();
+    localStorage.setItem('indunix_admin_token', data.access_token);
+    localStorage.setItem('indunix_admin_user', JSON.stringify(data.user));
+    return data;
+  },
+
+  async adminChangeInitialPassword(payload: { new_password: string }): Promise<{
+    status: string;
+    message: string;
+    access_token: string;
+    user: User;
+  }> {
+    const res = await fetch(`${API_BASE}/api/admin/change-initial-password`, {
+      method: 'POST',
+      headers: { ...getAdminAuthHeader(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Password update failed');
+    }
+    const data = await res.json();
+    localStorage.setItem('indunix_admin_token', data.access_token);
+    localStorage.setItem('indunix_admin_user', JSON.stringify(data.user));
+    return data;
+  },
+
+  adminLogout() {
+    localStorage.removeItem('indunix_admin_token');
+    localStorage.removeItem('indunix_admin_user');
+  },
+
+  getAdminUser(): User | null {
+    const raw = localStorage.getItem('indunix_admin_user');
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
+  },
+
   async getAdminConfig() {
     const res = await fetch(`${API_BASE}/api/admin/config`, {
-      headers: getAuthHeader(),
+      headers: getAdminAuthHeader(),
     });
     if (!res.ok) throw new Error('Failed to load admin config');
     return res.json();
@@ -519,7 +623,7 @@ export const api = {
   }) {
     const res = await fetch(`${API_BASE}/api/admin/config`, {
       method: 'POST',
-      headers: { ...getAuthHeader(), 'Content-Type': 'application/json' },
+      headers: { ...getAdminAuthHeader(), 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
     });
     if (!res.ok) throw new Error('Failed to update admin settings');
@@ -528,9 +632,103 @@ export const api = {
 
   async getAdminMetrics() {
     const res = await fetch(`${API_BASE}/api/admin/metrics`, {
-      headers: getAuthHeader(),
+      headers: getAdminAuthHeader(),
     });
     if (!res.ok) throw new Error('Failed to load admin metrics');
+    return res.json();
+  },
+
+  async getAdminUsers(search?: string, limit = 50, offset = 0): Promise<{ total: number; users: AdminUserItem[] }> {
+    const params = new URLSearchParams();
+    if (search && search.trim()) params.append('search', search.trim());
+    params.append('limit', String(limit));
+    params.append('offset', String(offset));
+
+    const res = await fetch(`${API_BASE}/api/admin/users?${params.toString()}`, {
+      headers: getAdminAuthHeader(),
+    });
+    if (!res.ok) throw new Error('Failed to load users');
+    return res.json();
+  },
+
+  async adminAdjustCredits(userId: string, payload: {
+    amount_ngn: number;
+    credit_type: 'bonus' | 'cash';
+    reason: string;
+    notify_user?: boolean;
+  }) {
+    const res = await fetch(`${API_BASE}/api/admin/users/${userId}/adjust-credits`, {
+      method: 'POST',
+      headers: { ...getAdminAuthHeader(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Failed to adjust user credits');
+    }
+    return res.json();
+  },
+
+  async adminUpdateUserStatus(userId: string, payload: {
+    is_active?: boolean;
+    is_frozen?: boolean;
+    role?: string;
+  }) {
+    const res = await fetch(`${API_BASE}/api/admin/users/${userId}/status`, {
+      method: 'PUT',
+      headers: { ...getAdminAuthHeader(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error('Failed to update user status');
+    return res.json();
+  },
+
+  async getAdminPricing(): Promise<{ pricing: Record<string, AdminModelPricingItem> }> {
+    const res = await fetch(`${API_BASE}/api/admin/pricing`, {
+      headers: getAdminAuthHeader(),
+    });
+    if (!res.ok) throw new Error('Failed to load model pricing');
+    return res.json();
+  },
+
+  async updateAdminPricing(models: Record<string, AdminModelPricingItem>) {
+    const res = await fetch(`${API_BASE}/api/admin/pricing`, {
+      method: 'PUT',
+      headers: { ...getAdminAuthHeader(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ models }),
+    });
+    if (!res.ok) throw new Error('Failed to update model pricing');
+    return res.json();
+  },
+
+  async getAdminPromos(): Promise<AdminPromoCampaigns> {
+    const res = await fetch(`${API_BASE}/api/admin/promos`, {
+      headers: getAdminAuthHeader(),
+    });
+    if (!res.ok) throw new Error('Failed to load promotions');
+    return res.json();
+  },
+
+  async updateAdminPromos(payload: Partial<AdminPromoCampaigns>): Promise<AdminPromoCampaigns> {
+    const res = await fetch(`${API_BASE}/api/admin/promos`, {
+      method: 'PUT',
+      headers: { ...getAdminAuthHeader(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error('Failed to update promotions');
+    return res.json();
+  },
+
+  async getPublicPromotions(): Promise<AdminPromoCampaigns> {
+    const res = await fetch(`${API_BASE}/api/auth/promotions`);
+    if (!res.ok) return {
+      signup_bonus_ngn: 1000.0,
+      sale_active: false,
+      sale_title: 'Developer Promo',
+      sale_discount_percent: 0,
+      banner_active: false,
+      banner_text: '',
+    };
     return res.json();
   },
 };

@@ -4,6 +4,7 @@ from backend.models.api_key import ApiKey
 from backend.models.usage import UsageLog
 from backend.models.enterprise import EnterpriseContract, BillingCycle, ContractStatus
 from backend.models.route import ModelRoute
+from backend.models.system_setting import SystemSetting
 
 __all__ = [
     "User",
@@ -18,4 +19,5 @@ __all__ = [
     "BillingCycle",
     "ContractStatus",
     "ModelRoute",
+    "SystemSetting",
 ]

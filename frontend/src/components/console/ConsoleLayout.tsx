@@ -25,9 +25,8 @@ import { KeyManager } from './KeyManager';
 import { UsageLogsView } from './UsageLogsView';
 import { BillingView } from './BillingView';
 import { EnterpriseView } from './EnterpriseView';
-import { AdminManagementView } from './AdminManagementView';
+import { EnterpriseProfileView } from './EnterpriseProfileView';
 import { LivePlayground } from '../landing/LivePlayground';
-import { ProfileSettingsModal } from '../modals/ProfileSettingsModal';
 
 interface ConsoleLayoutProps {
   user: User;
@@ -56,9 +55,8 @@ export const ConsoleLayout: React.FC<ConsoleLayoutProps> = ({
   onNavigateHome,
   onUserUpdated,
 }) => {
-  const [activeTab, setActiveTab] = useState<'overview' | 'keys' | 'logs' | 'billing' | 'enterprise' | 'playground' | 'admin'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'keys' | 'logs' | 'billing' | 'enterprise' | 'playground' | 'profile'>('overview');
   const [logFilter, setLogFilter] = useState<string>('');
-  const [isProfileOpen, setIsProfileOpen] = useState<boolean>(false);
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
   const [isNavDropdownOpen, setIsNavDropdownOpen] = useState<boolean>(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState<boolean>(false);
@@ -79,7 +77,7 @@ export const ConsoleLayout: React.FC<ConsoleLayoutProps> = ({
     { id: 'billing', label: 'Billing & Deposits', icon: CreditCard },
     { id: 'enterprise', label: 'Enterprise Edge', icon: Server },
     { id: 'playground', label: 'Live Playground', icon: Zap },
-    { id: 'admin', label: 'Admin & Gateway Keys', icon: ShieldAlert },
+    { id: 'profile', label: 'Enterprise Profile & Settings', icon: Settings },
   ];
 
   const currentNavItem = navItems.find((n) => n.id === activeTab) || navItems[0];
@@ -163,9 +161,16 @@ export const ConsoleLayout: React.FC<ConsoleLayoutProps> = ({
         {/* Sidebar Footer: USER PROFILE FIXED AT BOTTOM (NO SCROLL NEEDED) */}
         <div className="shrink-0 p-4 border-t border-slate-800/80 bg-[#0A0E18] space-y-2 mt-auto">
           <div
-            onClick={() => setIsProfileOpen(true)}
+            onClick={() => {
+              setActiveTab('profile');
+              setIsMobileMenuOpen(false);
+            }}
             title="Click to view profile & preference settings"
-            className="p-3 rounded-xl bg-slate-900/80 hover:bg-slate-850 border border-slate-800 hover:border-emerald-500/40 cursor-pointer flex items-center justify-between transition-all group"
+            className={`p-3 rounded-xl border cursor-pointer flex items-center justify-between transition-all group ${
+              activeTab === 'profile'
+                ? 'bg-slate-900 border-emerald-500/50 shadow-md'
+                : 'bg-slate-900/80 hover:bg-slate-850 border-slate-800 hover:border-emerald-500/40'
+            }`}
           >
             <div className="flex items-center gap-2.5 overflow-hidden">
               <div className="w-8 h-8 rounded-lg bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-bold text-xs shrink-0 group-hover:bg-emerald-500 group-hover:text-slate-950 transition-colors">
@@ -184,7 +189,8 @@ export const ConsoleLayout: React.FC<ConsoleLayoutProps> = ({
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  setIsProfileOpen(true);
+                  setActiveTab('profile');
+                  setIsMobileMenuOpen(false);
                 }}
                 title="Account Settings"
                 className="p-1.5 rounded-lg text-slate-400 hover:text-emerald-400 hover:bg-slate-800 transition-colors"
@@ -344,20 +350,15 @@ export const ConsoleLayout: React.FC<ConsoleLayoutProps> = ({
             </div>
           )}
 
-          {activeTab === 'admin' && (
-            <AdminManagementView />
+          {activeTab === 'profile' && (
+            <EnterpriseProfileView
+              user={user}
+              onUserUpdated={onUserUpdated}
+              onLogout={onLogout}
+            />
           )}
         </main>
       </div>
-
-      {/* Profile & Preferences Settings Modal */}
-      <ProfileSettingsModal
-        isOpen={isProfileOpen}
-        onClose={() => setIsProfileOpen(false)}
-        user={user}
-        onUserUpdated={onUserUpdated}
-        onLogout={onLogout}
-      />
     </div>
   );
 };

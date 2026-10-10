@@ -74,7 +74,7 @@ export const TermsPage: React.FC<TermsPageProps> = ({ onNavigateHome, onNavigate
               Token usage is metered and charged strictly in Nigerian Naira (NGN) per request:
             </p>
             <ul className="list-disc list-inside space-y-1.5 text-zinc-300 text-xs sm:text-sm pl-2">
-              <li><strong className="text-white">Published Rate Card:</strong> Incurred costs reflect exact token counts multiplied by published rates (e.g. ₦1,200.00/1M tokens for Spark, ₦1,800.00/1M tokens for Core, ₦3,200.00/1M tokens for Reason).</li>
+              <li><strong className="text-white">Published Rate Card:</strong> Incurred costs reflect exact token counts multiplied by published rates (such as ₦1,200.00/1M tokens for Spark, ₦1,800.00/1M tokens for Core, ₦3,200.00/1M tokens for Reason).</li>
               <li><strong className="text-white">Non-Expiring Credits:</strong> Prepaid Naira balances deposited into your wallet do not expire and remain active indefinitely.</li>
               <li><strong className="text-white">Atomic Deduction:</strong> Deductions occur atomically per completed HTTP/SSE request. If wallet balance is insufficient, the gateway returns HTTP 402 with structured payment instructions.</li>
             </ul>

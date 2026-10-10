@@ -118,7 +118,7 @@ export const EnterpriseContactModal: React.FC<EnterpriseContactModalProps> = ({
                     required
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
-                    placeholder="e.g. Tunde Balogun"
+                    placeholder="Contact officer full name"
                     className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors"
                   />
                 </div>
@@ -129,7 +129,7 @@ export const EnterpriseContactModal: React.FC<EnterpriseContactModalProps> = ({
                     required
                     value={companyName}
                     onChange={(e) => setCompanyName(e.target.value)}
-                    placeholder="e.g. Zenith Bank Plc"
+                    placeholder="Enterprise legal entity name"
                     className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 transition-colors"
                   />
                 </div>

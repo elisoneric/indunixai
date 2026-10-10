@@ -18,15 +18,17 @@ import { DeveloperDocsModal } from './components/modals/DeveloperDocsModal';
 import { HelpDeskModal } from './components/modals/HelpDeskModal';
 import { EnterpriseContactModal } from './components/modals/EnterpriseContactModal';
 import { ConsoleLayout } from './components/console/ConsoleLayout';
+import { AdminPage } from './components/admin/AdminPage';
 
 export function App() {
-  const [currentPage, setCurrentPage] = useState<'landing' | 'console' | 'docs' | 'privacy' | 'terms' | 'auth'>('landing');
+  const [currentPage, setCurrentPage] = useState<'landing' | 'console' | 'docs' | 'privacy' | 'terms' | 'auth' | 'admin'>('landing');
   const [user, setUser] = useState<User | null>(null);
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [summary, setSummary] = useState<UsageSummary | null>(null);
   const [keys, setKeys] = useState<ApiKeyItem[]>([]);
   const [transactions, setTransactions] = useState<TransactionItem[]>([]);
   const [logs, setLogs] = useState<UsageLogItem[]>([]);
+  const [promotions, setPromotions] = useState<any>(null);
 
   // Modals & Pages
   const [isAuthOpen, setIsAuthOpen] = useState<boolean>(false);
@@ -58,11 +60,15 @@ export function App() {
         window.history.replaceState(null, '', '/login');
       } else if (hash === '#register' || hash === '#signup') {
         window.history.replaceState(null, '', '/register');
+      } else if (hash === '#admin' || hash === '#/admin') {
+        window.history.replaceState(null, '', '/admin');
       }
 
       const activePath = window.location.pathname.toLowerCase();
 
-      if (host.startsWith('docs.') || activePath === '/docs' || hash === '#docs') {
+      if (host.startsWith('admin.') || activePath === '/admin' || hash === '#admin') {
+        setCurrentPage('admin');
+      } else if (host.startsWith('docs.') || activePath === '/docs' || hash === '#docs') {
         setCurrentPage('docs');
       } else if (host.startsWith('console.') || host.startsWith('app.') || activePath === '/console' || hash === '#console') {
         setCurrentPage('console');
@@ -90,7 +96,7 @@ export function App() {
     };
   }, []);
 
-  const handleNavigate = (page: 'landing' | 'console' | 'docs' | 'privacy' | 'terms' | 'auth') => {
+  const handleNavigate = (page: 'landing' | 'console' | 'docs' | 'privacy' | 'terms' | 'auth' | 'admin') => {
     if (page === 'console' && !user) {
       handleOpenAuth('login');
       return;
@@ -99,7 +105,10 @@ export function App() {
     setCurrentPage(page);
     const host = window.location.hostname.toLowerCase();
 
-    if (page === 'docs') {
+    if (page === 'admin') {
+      window.history.pushState(null, '', '/admin');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else if (page === 'docs') {
       if (!host.startsWith('docs.')) {
         window.history.pushState(null, '', '/docs');
       }
@@ -122,6 +131,10 @@ export function App() {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
+
+  useEffect(() => {
+    api.getPublicPromotions().then(setPromotions).catch(() => {});
+  }, []);
 
 
   // Load user data on startup
@@ -189,7 +202,18 @@ export function App() {
 
   return (
     <div className="min-h-screen bg-[#06070A] text-[#F8FAFC]">
-      {currentPage === 'console' && user ? (
+      {/* Dynamic Public Promo Announcement Banner */}
+      {promotions?.banner_active && promotions?.banner_text && currentPage !== 'admin' && currentPage !== 'console' && (
+        <aside aria-label="Announcement" className="bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-600 text-slate-950 px-4 py-2 text-center text-xs font-bold tracking-wide shadow-md flex items-center justify-center gap-2 relative z-50">
+          <span>⚡</span>
+          <span>{promotions.banner_text}</span>
+        </aside>
+      )}
+
+      {currentPage === 'admin' ? (
+        /* Isolated Master System Administration Console (/admin) */
+        <AdminPage onNavigateHome={() => handleNavigate('landing')} />
+      ) : currentPage === 'console' && user ? (
         /* Authenticated Developer Console View */
         <ConsoleLayout
           user={user}
