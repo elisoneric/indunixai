@@ -95,6 +95,8 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigateHome }) => {
   const [flatFeeNgn, setFlatFeeNgn] = useState<number>(100.0);
   const [feeCapNgn, setFeeCapNgn] = useState<number>(2000.0);
   const [fxRate, setFxRate] = useState<number>(1500.0);
+  const [customFxInput, setCustomFxInput] = useState<string>('1500');
+  const [savingFxRate, setSavingFxRate] = useState<boolean>(false);
   const [pingingDeepSeek, setPingingDeepSeek] = useState<boolean>(false);
 
   // Metrics
@@ -179,11 +181,31 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigateHome }) => {
         setFlatFeeNgn(res.deposit_fee_settings.flat_fee_ngn);
         setFeeCapNgn(res.deposit_fee_settings.fee_cap_ngn);
         setFxRate(res.deposit_fee_settings.fx_rate_usd_ngn);
+        setCustomFxInput(String(res.deposit_fee_settings.fx_rate_usd_ngn));
       }
     } catch {
       // Ignored
     } finally {
       setFinancialsLoading(false);
+    }
+  };
+
+  const handleApplyFxRate = async (newRate: number) => {
+    if (isNaN(newRate) || newRate <= 0) {
+      showToast('error', 'Please enter a valid positive exchange rate.');
+      return;
+    }
+    setSavingFxRate(true);
+    try {
+      await api.updateFxRate(newRate);
+      setFxRate(newRate);
+      setCustomFxInput(String(newRate));
+      showToast('success', `USD/NGN FX benchmark updated to ₦${newRate.toLocaleString()}! Recomputed actual revenue and wholesale COGS.`);
+      await loadFinancials();
+    } catch (err: any) {
+      showToast('error', err.message || 'Failed to update FX rate');
+    } finally {
+      setSavingFxRate(false);
     }
   };
 
@@ -908,6 +930,104 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigateHome }) => {
                 </button>
               </div>
 
+              {/* Dedicated Currency & FX Conversion Engine (USD/NGN) */}
+              <div className="p-6 rounded-2xl bg-gradient-to-r from-[#0C1222] via-[#0D152A] to-[#0A0E1A] border border-emerald-500/30 shadow-2xl space-y-4">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-11 h-11 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center justify-center shrink-0">
+                      <DollarSign className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-heading text-sm font-bold text-white">USD / NGN Currency Benchmark for Revenue Accounting</h3>
+                        <span className="px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                          Active: 1 USD = ₦{fxRate.toLocaleString()} NGN
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        Controls the live valuation of wholesale upstream inference (DeepSeek &amp; Groq billed in USD) to compute true Nigerian Naira cost of goods sold (COGS), net gross margins, and reserve solvency.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Quick FX Presets */}
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-[11px] text-slate-400 font-medium">Quick Benchmarks:</span>
+                    {[
+                      { label: '₦1,450 (NAFEM)', value: 1450 },
+                      { label: '₦1,500 (Base)', value: 1500 },
+                      { label: '₦1,550 (Parallel)', value: 1550 },
+                      { label: '₦1,600 (Buffer)', value: 1600 },
+                    ].map((preset) => (
+                      <button
+                        key={preset.value}
+                        type="button"
+                        onClick={() => handleApplyFxRate(preset.value)}
+                        disabled={savingFxRate}
+                        className={`px-2.5 py-1.5 rounded-lg text-xs font-mono font-semibold transition-all border ${
+                          fxRate === preset.value
+                            ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md font-bold'
+                            : 'bg-slate-900/90 hover:bg-slate-850 text-slate-300 border-slate-700/80 hover:text-white'
+                        }`}
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="pt-3 border-t border-slate-800/80 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
+                  <div className="flex items-center gap-2.5 flex-1 max-w-md">
+                    <div className="relative flex-1">
+                      <span className="absolute left-3.5 top-2.5 text-xs text-slate-500 font-mono">₦</span>
+                      <input
+                        type="number"
+                        step="1"
+                        value={customFxInput}
+                        onChange={(e) => setCustomFxInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            const val = parseFloat(customFxInput);
+                            if (val && val > 0) handleApplyFxRate(val);
+                          }
+                        }}
+                        placeholder="Custom FX Rate (e.g. 1530)"
+                        className="w-full pl-8 pr-4 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs font-mono outline-none focus:border-emerald-500"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const val = parseFloat(customFxInput);
+                        if (val && val > 0) handleApplyFxRate(val);
+                      }}
+                      disabled={savingFxRate || !customFxInput}
+                      className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 font-bold text-xs transition-all flex items-center gap-1.5 shrink-0 shadow-lg"
+                    >
+                      {savingFxRate ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                      <span>Apply FX Rate</span>
+                    </button>
+                  </div>
+
+                  {/* Live Impact Telemetry Summary */}
+                  <div className="flex flex-wrap items-center gap-4 text-xs font-mono text-slate-400">
+                    <div className="flex items-center gap-1.5 bg-slate-950/60 px-2.5 py-1 rounded-lg border border-slate-800">
+                      <span className="text-slate-500">Spark Wholesale:</span>
+                      <span className="text-white font-semibold">₦{(0.05 * fxRate).toFixed(2)} / 1M</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 bg-slate-950/60 px-2.5 py-1 rounded-lg border border-slate-800">
+                      <span className="text-slate-500">Core Wholesale:</span>
+                      <span className="text-emerald-400 font-semibold">₦{(0.14 * fxRate).toFixed(2)} / 1M</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 bg-slate-950/60 px-2.5 py-1 rounded-lg border border-slate-800">
+                      <span className="text-slate-500">Reason Wholesale:</span>
+                      <span className="text-purple-400 font-semibold">₦{(0.55 * fxRate).toFixed(2)} / 1M</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               {/* Top 5 High-Level Financial KPI Cards */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
                 {/* 1. Gross Inflow */}
@@ -1411,43 +1531,76 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigateHome }) => {
                       </div>
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-[11px] font-semibold text-slate-300 mb-1">
-                            Prompt Input Cost (₦ / 1M Tokens)
-                          </label>
-                          <input
-                            type="number"
-                            step="10"
-                            value={rate.prompt_per_million}
-                            onChange={(e) => {
-                              const val = parseFloat(e.target.value) || 0;
-                              setPricing({
-                                ...pricing,
-                                [modelId]: { ...rate, prompt_per_million: val },
-                              });
-                            }}
-                            className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white outline-none focus:border-emerald-500 clean-nums"
-                          />
-                        </div>
+                        {(() => {
+                          const getWholesale = (id: string) => {
+                            if (id.includes('spark')) return { promptUsd: 0.05, compUsd: 0.08 };
+                            if (id.includes('reason')) return { promptUsd: 0.55, compUsd: 2.19 };
+                            return { promptUsd: 0.14, compUsd: 0.28 };
+                          };
+                          const ws = getWholesale(modelId);
+                          const pCostNgn = ws.promptUsd * fxRate;
+                          const cCostNgn = ws.compUsd * fxRate;
+                          const pMargin = rate.prompt_per_million > 0
+                            ? (((rate.prompt_per_million - pCostNgn) / rate.prompt_per_million) * 100).toFixed(1)
+                            : '0';
+                          const cMargin = rate.completion_per_million > 0
+                            ? (((rate.completion_per_million - cCostNgn) / rate.completion_per_million) * 100).toFixed(1)
+                            : '0';
 
-                        <div>
-                          <label className="block text-[11px] font-semibold text-slate-300 mb-1">
-                            Completion Output Cost (₦ / 1M Tokens)
-                          </label>
-                          <input
-                            type="number"
-                            step="10"
-                            value={rate.completion_per_million}
-                            onChange={(e) => {
-                              const val = parseFloat(e.target.value) || 0;
-                              setPricing({
-                                ...pricing,
-                                [modelId]: { ...rate, completion_per_million: val },
-                              });
-                            }}
-                            className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white outline-none focus:border-emerald-500 clean-nums"
-                          />
-                        </div>
+                          return (
+                            <>
+                              <div>
+                                <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                                  Prompt Input Cost (₦ / 1M Tokens)
+                                </label>
+                                <input
+                                  type="number"
+                                  step="10"
+                                  value={rate.prompt_per_million}
+                                  onChange={(e) => {
+                                    const val = parseFloat(e.target.value) || 0;
+                                    setPricing({
+                                      ...pricing,
+                                      [modelId]: { ...rate, prompt_per_million: val },
+                                    });
+                                  }}
+                                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white outline-none focus:border-emerald-500 clean-nums font-mono"
+                                />
+                                <div className="flex items-center justify-between text-[10px] font-mono pt-1.5 text-slate-400">
+                                  <span>Wholesale: ₦{pCostNgn.toFixed(2)} (${ws.promptUsd})</span>
+                                  <span className={Number(pMargin) >= 0 ? 'text-emerald-400 font-semibold' : 'text-rose-400 font-semibold'}>
+                                    {Number(pMargin) >= 0 ? `+${pMargin}% Margin` : `${pMargin}% Margin`}
+                                  </span>
+                                </div>
+                              </div>
+
+                              <div>
+                                <label className="block text-[11px] font-semibold text-slate-300 mb-1">
+                                  Completion Output Cost (₦ / 1M Tokens)
+                                </label>
+                                <input
+                                  type="number"
+                                  step="10"
+                                  value={rate.completion_per_million}
+                                  onChange={(e) => {
+                                    const val = parseFloat(e.target.value) || 0;
+                                    setPricing({
+                                      ...pricing,
+                                      [modelId]: { ...rate, completion_per_million: val },
+                                    });
+                                  }}
+                                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white outline-none focus:border-emerald-500 clean-nums font-mono"
+                                />
+                                <div className="flex items-center justify-between text-[10px] font-mono pt-1.5 text-slate-400">
+                                  <span>Wholesale: ₦{cCostNgn.toFixed(2)} (${ws.compUsd})</span>
+                                  <span className={Number(cMargin) >= 0 ? 'text-emerald-400 font-semibold' : 'text-rose-400 font-semibold'}>
+                                    {Number(cMargin) >= 0 ? `+${cMargin}% Margin` : `${cMargin}% Margin`}
+                                  </span>
+                                </div>
+                              </div>
+                            </>
+                          );
+                        })()}
                       </div>
                     </div>
                   ))}

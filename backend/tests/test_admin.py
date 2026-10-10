@@ -120,7 +120,18 @@ async def test_admin_full_workflow():
             assert pub_promo_res.status_code == 200
             assert pub_promo_res.json()["signup_bonus_ngn"] == 2500.0
 
-            # 7. Security: Verify non-admin developer user is rejected with 403 Forbidden
+            # 7. FX Rate Benchmark & Financials Recalculation
+            fx_res = await client.post("/api/admin/financials/fx-rate", headers=admin_headers, json={
+                "fx_rate_usd_ngn": 1580.0
+            })
+            assert fx_res.status_code == 200
+            assert fx_res.json()["fx_rate_usd_ngn"] == 1580.0
+
+            fin_res = await client.get("/api/admin/financials", headers=admin_headers)
+            assert fin_res.status_code == 200
+            assert fin_res.json()["fx_rate_usd_ngn"] == 1580.0
+
+            # 8. Security: Verify non-admin developer user is rejected with 403 Forbidden
             dev_email = f"dev_{uuid.uuid4().hex[:8]}@indunixai.com"
             reg_dev = await client.post("/api/auth/register", json={
                 "email": dev_email,

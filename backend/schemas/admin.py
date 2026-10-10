@@ -108,6 +108,10 @@ class DepositFeeSettings(BaseModel):
     fee_cap_ngn: float = 2000.0
     fx_rate_usd_ngn: float = 1500.0
 
+class AdminFxRateUpdate(BaseModel):
+    fx_rate_usd_ngn: float
+
+
 class AdminFinancialReport(BaseModel):
     # Cash Inflow (Deposits)
     gross_inflow_ngn: float

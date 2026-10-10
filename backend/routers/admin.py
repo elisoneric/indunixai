@@ -29,6 +29,7 @@ from backend.schemas.admin import (
     ModelUnitEconomics,
     DeepSeekLiveBalance,
     DepositFeeSettings,
+    AdminFxRateUpdate,
     AdminFinancialReport,
     AdminSmtpSettings,
     AdminSmtpUpdateRequest,
@@ -844,6 +845,45 @@ async def refresh_deepseek_balance_endpoint(
     fx_rate = fee_setting.value_json.get("fx_rate_usd_ngn", 1500.0) if fee_setting and fee_setting.value_json else 1500.0
     return await fetch_deepseek_balance(fx_rate)
 
+@router.post("/financials/fx-rate")
+@router.put("/financials/fx-rate")
+async def update_fx_rate(
+    payload: AdminFxRateUpdate,
+    user: User = Depends(get_current_admin_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Updates the USD/NGN exchange rate benchmark directly.
+    Instantly re-calibrates upstream wholesale API costs (DeepSeek/Groq in USD),
+    recognized gross profit margins, and live reserve valuations in Naira.
+    """
+    if payload.fx_rate_usd_ngn <= 0:
+        raise HTTPException(status_code=400, detail="Exchange rate must be greater than zero.")
+
+    setting = await db.get(SystemSetting, "deposit_fee_settings")
+    if not setting:
+        cfg_data = {
+            "fee_strategy": "absorb",
+            "fee_percent": 1.5,
+            "flat_fee_ngn": 100.0,
+            "flat_fee_threshold_ngn": 2500.0,
+            "fee_cap_ngn": 2000.0,
+            "fx_rate_usd_ngn": float(payload.fx_rate_usd_ngn)
+        }
+        setting = SystemSetting(key="deposit_fee_settings", value_json=cfg_data)
+        db.add(setting)
+    else:
+        cfg_data = dict(setting.value_json or {})
+        cfg_data["fx_rate_usd_ngn"] = float(payload.fx_rate_usd_ngn)
+        setting.value_json = cfg_data
+
+    await db.commit()
+    return {
+        "status": "success",
+        "message": f"USD/NGN FX benchmark updated to ₦{payload.fx_rate_usd_ngn:,.2f}.",
+        "fx_rate_usd_ngn": float(payload.fx_rate_usd_ngn)
+    }
+
 # =========================================================================
 # 7. SMTP & Outbound Email Configuration Gate
 # =========================================================================
@@ -938,6 +978,10 @@ async def test_admin_smtp(
     db: AsyncSession = Depends(get_db)
 ):
     """Sends a live test verification email to confirm delivery."""
+    setting = await db.get(SystemSetting, "smtp_settings")
+    if setting and setting.value_json:
+        email_service.update_config(setting.value_json)
+
     recipient = (payload.recipient_email or user.email).strip()
     success, message = email_service.test_connection(recipient)
     return {"success": success, "message": message, "recipient": recipient}

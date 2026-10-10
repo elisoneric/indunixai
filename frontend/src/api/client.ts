@@ -838,6 +838,19 @@ export const api = {
     return res.json();
   },
 
+  async updateFxRate(fx_rate_usd_ngn: number): Promise<{ status: string; message: string; fx_rate_usd_ngn: number }> {
+    const res = await fetch(`${API_BASE}/api/admin/financials/fx-rate`, {
+      method: 'POST',
+      headers: { ...getAdminAuthHeader(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fx_rate_usd_ngn }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || 'Failed to update FX rate');
+    }
+    return res.json();
+  },
+
   async refreshDeepSeekBalance(): Promise<DeepSeekLiveBalance> {
     const res = await fetch(`${API_BASE}/api/admin/financials/refresh-deepseek-balance`, {
       method: 'POST',
