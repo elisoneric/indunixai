@@ -107,3 +107,21 @@ async def test_paystack_deposit_and_webhook():
         wallet2 = wallet_res2.json()
         assert wallet2["balance_ngn"] == 5500.0
 
+        # Test sync-bank-transfers with empty body (auto-sync)
+        sync_res = await client.post("/api/billing/sync-bank-transfers", json={}, headers=headers)
+        assert sync_res.status_code == 200, sync_res.text
+        sync_data = sync_res.json()
+        assert sync_data["status"] in ("success", "error")
+        assert "credited_count" in sync_data
+
+        # Test sync-bank-transfers with already processed reference
+        sync_ref_res = await client.post(
+            "/api/billing/sync-bank-transfers",
+            json={"reference": dva_ref},
+            headers=headers
+        )
+        assert sync_ref_res.status_code == 200, sync_ref_res.text
+        sync_ref_data = sync_ref_res.json()
+        assert sync_ref_data["status"] == "success"
+        assert "already verified" in sync_ref_data["message"]
+

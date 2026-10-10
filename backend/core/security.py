@@ -54,12 +54,13 @@ def verify_paystack_signature(payload_bytes: bytes, signature_header: str) -> bo
     """Verifies the Paystack webhook signature using HMAC SHA-512."""
     if not signature_header:
         return False
+    key = (settings.PAYSTACK_SECRET_KEY or "").strip()
     computed_hmac = hmac.new(
-        settings.PAYSTACK_SECRET_KEY.encode("utf-8"),
+        key.encode("utf-8"),
         payload_bytes,
         hashlib.sha512
     ).hexdigest()
-    return hmac.compare_digest(computed_hmac, signature_header)
+    return hmac.compare_digest(computed_hmac, signature_header.strip())
 
 def sign_enterprise_lease(contract_id: str, machine_fingerprint: str, hours_valid: int = 24) -> Tuple[str, datetime]:
     """Generates an encrypted/signed 24-hour runtime license lease token for Axion Edge."""

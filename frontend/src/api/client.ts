@@ -396,7 +396,7 @@ export const api = {
     return res.json();
   },
 
-  async syncBankTransfers(): Promise<{
+  async syncBankTransfers(reference?: string): Promise<{
     status: string;
     message: string;
     credited_count: number;
@@ -405,7 +405,8 @@ export const api = {
   }> {
     const res = await fetch(`${API_BASE}/api/billing/sync-bank-transfers`, {
       method: 'POST',
-      headers: getAuthHeader(),
+      headers: { ...getAuthHeader(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(reference ? { reference: reference.trim() } : {}),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));

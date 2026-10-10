@@ -37,3 +37,6 @@ class VirtualAccountProvisionRequest(BaseModel):
     phone: Optional[str] = None
     nin_or_bvn: Optional[str] = None
 
+class SyncTransfersRequest(BaseModel):
+    reference: Optional[str] = None
+

@@ -164,19 +164,26 @@ export const BillingModal: React.FC<BillingModalProps> = ({
 
   const [syncingTransfers, setSyncingTransfers] = useState(false);
   const [syncNotice, setSyncNotice] = useState<string | null>(null);
+  const [manualTransferRef, setManualTransferRef] = useState('');
 
-  const handleSyncTransfers = async () => {
+  const handleSyncTransfers = async (refOverride?: string) => {
     setSyncingTransfers(true);
     setSyncNotice(null);
     setError(null);
     try {
-      const res = await api.syncBankTransfers();
-      if (res.credited_count > 0) {
-        setSyncNotice(`Successfully credited ${res.credited_count} transfer(s) (+₦${res.total_credited_ngn.toLocaleString()}) to your wallet!`);
-        onSuccess();
+      const targetRef = refOverride !== undefined ? refOverride : (manualTransferRef.trim() || undefined);
+      const res = await api.syncBankTransfers(targetRef);
+      if (res.status === 'success') {
+        if (res.credited_count > 0) {
+          setSyncNotice(res.message || `Successfully credited ${res.credited_count} transfer(s) (+₦${res.total_credited_ngn.toLocaleString()}) to your wallet!`);
+          setManualTransferRef('');
+          onSuccess();
+        } else {
+          setSyncNotice(res.message || 'All bank transfers are up to date. No pending uncredited transfers found.');
+          onSuccess();
+        }
       } else {
-        setSyncNotice('All bank transfers are up to date. No pending uncredited transfers found.');
-        onSuccess();
+        setError(res.message || 'Could not locate or credit transfer with this reference.');
       }
     } catch (err: any) {
       setError(err.message || 'Unable to sync bank transfers at this time.');
@@ -521,15 +528,40 @@ export const BillingModal: React.FC<BillingModalProps> = ({
                       </div>
                     )}
 
+                    {/* Optional Reference Verification */}
+                    <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-semibold text-slate-300">Transferred Already? (Optional Reference)</span>
+                        <span className="text-[10px] text-slate-500">Paystack / Bank Ref</span>
+                      </div>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={manualTransferRef}
+                          onChange={(e) => setManualTransferRef(e.target.value)}
+                          placeholder="e.g. T4891029482 or Session ID"
+                          className="flex-1 px-3 py-2 bg-slate-900 border border-slate-800 rounded-lg text-xs font-mono text-white placeholder:text-slate-600 focus:outline-none focus:border-emerald-500"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleSyncTransfers(manualTransferRef.trim())}
+                          disabled={syncingTransfers || !manualTransferRef.trim()}
+                          className="px-3 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition-all disabled:opacity-40 whitespace-nowrap"
+                        >
+                          Verify Ref
+                        </button>
+                      </div>
+                    </div>
+
                     <div className="flex flex-col gap-2 pt-1">
                       <button
                         type="button"
-                        onClick={handleSyncTransfers}
+                        onClick={() => handleSyncTransfers()}
                         disabled={syncingTransfers}
-                        className="w-full py-2.5 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 disabled:opacity-50"
+                        className="w-full py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs transition-all flex items-center justify-center gap-2 border border-slate-700 disabled:opacity-50"
                       >
-                        <RefreshCw className={`w-3.5 h-3.5 ${syncingTransfers ? 'animate-spin' : ''}`} />
-                        <span>{syncingTransfers ? 'Checking for Bank Transfers...' : 'Sync & Credit Recent Transfers'}</span>
+                        <RefreshCw className={`w-3.5 h-3.5 text-emerald-400 ${syncingTransfers ? 'animate-spin' : ''}`} />
+                        <span>{syncingTransfers ? 'Checking for Bank Transfers...' : 'Auto-Sync & Credit Recent Transfers'}</span>
                       </button>
 
                       <button
