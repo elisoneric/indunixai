@@ -131,6 +131,63 @@ export interface EnterpriseContract {
   created_at: string;
 }
 
+export interface ModelUnitEconomics {
+  model_id: string;
+  model_name: string;
+  requests: number;
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  retail_revenue_ngn: number;
+  upstream_cost_usd: number;
+  upstream_cost_ngn: number;
+  gross_profit_ngn: number;
+  margin_percent: number;
+}
+
+export interface DeepSeekLiveBalance {
+  status: 'connected' | 'unconfigured' | 'error' | 'mock' | 'network_error';
+  is_available: boolean;
+  currency: string;
+  total_balance: number;
+  granted_balance: number;
+  topped_up_balance: number;
+  balance_ngn: number;
+  message: string;
+}
+
+export interface DepositFeeSettings {
+  fee_strategy: 'absorb' | 'pass_through';
+  fee_percent: number;
+  flat_fee_ngn: number;
+  flat_fee_threshold_ngn: number;
+  fee_cap_ngn: number;
+  fx_rate_usd_ngn: number;
+}
+
+export interface AdminFinancialReport {
+  gross_inflow_ngn: number;
+  gateway_fees_ngn: number;
+  net_inflow_credited_ngn: number;
+  deposit_count: number;
+  avg_deposit_amount_ngn: number;
+  recognized_revenue_ngn: number;
+  total_tokens_consumed: number;
+  total_requests: number;
+  upstream_cogs_usd: number;
+  upstream_cogs_ngn: number;
+  fx_rate_usd_ngn: number;
+  gross_profit_ngn: number;
+  gross_margin_percent: number;
+  net_profit_ngn: number;
+  net_margin_percent: number;
+  deepseek_balance: DeepSeekLiveBalance;
+  user_liabilities_ngn: number;
+  solvency_coverage_ratio: number;
+  deposit_fee_settings: DepositFeeSettings;
+  model_economics: ModelUnitEconomics[];
+}
+
 function getAuthHeader(): Record<string, string> {
   const token = localStorage.getItem('indunix_token') || localStorage.getItem('axion_token');
   return token ? { Authorization: `Bearer ${token}` } : {};
@@ -335,6 +392,24 @@ export const api = {
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.detail || 'Failed to provision dedicated virtual account');
+    }
+    return res.json();
+  },
+
+  async syncBankTransfers(): Promise<{
+    status: string;
+    message: string;
+    credited_count: number;
+    total_credited_ngn: number;
+    new_balance_ngn?: number;
+  }> {
+    const res = await fetch(`${API_BASE}/api/billing/sync-bank-transfers`, {
+      method: 'POST',
+      headers: getAuthHeader(),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || err.message || 'Failed to sync bank transfers');
     }
     return res.json();
   },
@@ -729,6 +804,33 @@ export const api = {
       banner_active: false,
       banner_text: '',
     };
+    return res.json();
+  },
+
+  async getAdminFinancials(): Promise<AdminFinancialReport> {
+    const res = await fetch(`${API_BASE}/api/admin/financials`, {
+      headers: getAdminAuthHeader(),
+    });
+    if (!res.ok) throw new Error('Failed to load financial report');
+    return res.json();
+  },
+
+  async updateDepositFeeSettings(payload: Partial<DepositFeeSettings>): Promise<DepositFeeSettings> {
+    const res = await fetch(`${API_BASE}/api/admin/financials/deposit-fee-settings`, {
+      method: 'PUT',
+      headers: { ...getAdminAuthHeader(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error('Failed to update deposit fee policy');
+    return res.json();
+  },
+
+  async refreshDeepSeekBalance(): Promise<DeepSeekLiveBalance> {
+    const res = await fetch(`${API_BASE}/api/admin/financials/refresh-deepseek-balance`, {
+      method: 'POST',
+      headers: getAdminAuthHeader(),
+    });
+    if (!res.ok) throw new Error('Failed to refresh DeepSeek balance');
     return res.json();
   },
 };

@@ -76,3 +76,69 @@ class AdminUserListItem(BaseModel):
     total_api_keys: int
     total_tokens: int
     total_requests: int
+
+class ModelUnitEconomics(BaseModel):
+    model_id: str
+    model_name: str
+    requests: int
+    prompt_tokens: int
+    completion_tokens: int
+    total_tokens: int
+    retail_revenue_ngn: float
+    upstream_cost_usd: float
+    upstream_cost_ngn: float
+    gross_profit_ngn: float
+    margin_percent: float
+
+class DeepSeekLiveBalance(BaseModel):
+    status: str  # "connected", "unconfigured", "error", "mock"
+    is_available: bool
+    currency: str = "USD"
+    total_balance: float = 0.0
+    granted_balance: float = 0.0
+    topped_up_balance: float = 0.0
+    balance_ngn: float = 0.0
+    message: str = ""
+
+class DepositFeeSettings(BaseModel):
+    fee_strategy: str = "absorb"  # "absorb" or "pass_through"
+    fee_percent: float = 1.5
+    flat_fee_ngn: float = 100.0
+    flat_fee_threshold_ngn: float = 2500.0
+    fee_cap_ngn: float = 2000.0
+    fx_rate_usd_ngn: float = 1500.0
+
+class AdminFinancialReport(BaseModel):
+    # Cash Inflow (Deposits)
+    gross_inflow_ngn: float
+    gateway_fees_ngn: float
+    net_inflow_credited_ngn: float
+    deposit_count: int
+    avg_deposit_amount_ngn: float
+
+    # Recognized Revenue (Tokens meter)
+    recognized_revenue_ngn: float
+    total_tokens_consumed: int
+    total_requests: int
+
+    # Wholesale COGS
+    upstream_cogs_usd: float
+    upstream_cogs_ngn: float
+    fx_rate_usd_ngn: float
+
+    # Profitability
+    gross_profit_ngn: float
+    gross_margin_percent: float
+    net_profit_ngn: float
+    net_margin_percent: float
+
+    # Live DeepSeek & Liabilities
+    deepseek_balance: DeepSeekLiveBalance
+    user_liabilities_ngn: float
+    solvency_coverage_ratio: float
+
+    # Deposit Fee Settings
+    deposit_fee_settings: DepositFeeSettings
+
+    # Per-Model Breakdown
+    model_economics: List[ModelUnitEconomics]

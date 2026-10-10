@@ -2,7 +2,7 @@ import uuid
 from typing import Dict, Any, Tuple, Optional
 import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 from backend.core.config import settings
 from backend.models.user import User
 from backend.models.wallet import Wallet, Transaction, TransactionStatus, TransactionChannel
@@ -283,37 +283,85 @@ class PaystackService:
         reference: str,
         amount_ngn: float,
         channel: str = "CARD",
-        metadata: Dict[str, Any] = None
+        metadata: Dict[str, Any] = None,
+        user_id: Optional[str] = None
     ) -> Tuple[bool, str]:
         """
         Idempotently credits the user's wallet upon verified payment.
+        Supports BOTH pre-initialized transactions AND direct Dedicated Virtual Account bank transfers.
         """
-        # Check transaction
+        # 1. Check if transaction already exists in database
         tx_res = await db.execute(select(Transaction).where(Transaction.reference == reference).with_for_update())
         tx = tx_res.scalar_one_or_none()
 
-        if not tx:
-            return False, "Transaction reference not found"
-
-        if tx.status == TransactionStatus.SUCCESS:
+        if tx and tx.status == TransactionStatus.SUCCESS:
             return True, "Transaction already processed"
 
-        # Update transaction
-        tx.status = TransactionStatus.SUCCESS
-        if channel:
-            tx.channel = channel
-        if metadata:
-            tx.metadata_json = metadata
+        wallet = None
 
-        # Credit wallet (strictly 2 decimal places)
-        wallet_res = await db.execute(select(Wallet).where(Wallet.id == tx.wallet_id).with_for_update())
-        wallet = wallet_res.scalar_one()
+        if tx:
+            # Pre-existing transaction record (e.g. web checkout flow)
+            wallet_res = await db.execute(select(Wallet).where(Wallet.id == tx.wallet_id).with_for_update())
+            wallet = wallet_res.scalar_one_or_none()
+            tx.status = TransactionStatus.SUCCESS
+            if channel:
+                tx.channel = channel
+            if metadata:
+                tx.metadata_json = metadata
+        else:
+            # Direct Dedicated Virtual Account Transfer or Direct Bank Payment!
+            # Resolve the wallet via multiple lookup strategies
+            meta = metadata or {}
+            cust_info = meta.get("customer", {}) if isinstance(meta.get("customer"), dict) else {}
+            cust_code = cust_info.get("customer_code")
+            cust_email = cust_info.get("email")
+            ded_info = meta.get("dedicated_account", {}) if isinstance(meta.get("dedicated_account"), dict) else {}
+            account_number = ded_info.get("account_number")
+
+            # Strategy A: by user_id if provided directly (e.g. from authenticated verify call)
+            if user_id:
+                w_res = await db.execute(select(Wallet).where(Wallet.user_id == user_id).with_for_update())
+                wallet = w_res.scalar_one_or_none()
+
+            # Strategy B: by Paystack Customer Code on Wallet
+            if not wallet and cust_code:
+                w_res = await db.execute(select(Wallet).where(Wallet.paystack_customer_code == cust_code).with_for_update())
+                wallet = w_res.scalar_one_or_none()
+
+            # Strategy C: by Dedicated Account Number on Wallet
+            if not wallet and account_number:
+                w_res = await db.execute(select(Wallet).where(Wallet.dedicated_account_number == account_number).with_for_update())
+                wallet = w_res.scalar_one_or_none()
+
+            # Strategy D: by Customer Email on User record
+            if not wallet and cust_email:
+                u_res = await db.execute(select(User).where(func.lower(User.email) == cust_email.strip().lower()))
+                target_user = u_res.scalar_one_or_none()
+                if target_user:
+                    w_res = await db.execute(select(Wallet).where(Wallet.user_id == target_user.id).with_for_update())
+                    wallet = w_res.scalar_one_or_none()
+
+            if not wallet:
+                return False, f"Could not associate payment reference {reference} with any Indunix wallet"
+
+            # Create immutable transaction record for this bank transfer
+            tx = Transaction(
+                wallet_id=wallet.id,
+                reference=reference,
+                amount_ngn=amount_ngn,
+                channel=channel or "BANK_TRANSFER",
+                status=TransactionStatus.SUCCESS,
+                metadata_json=metadata or {"channel": channel, "type": "dedicated_account_transfer"}
+            )
+            db.add(tx)
+
+        # 2. Credit wallet (strictly 2 decimal places)
         current_balance = float(wallet.balance_ngn)
         wallet.balance_ngn = round(current_balance + amount_ngn, 2)
-
         await db.commit()
+        await db.refresh(wallet)
 
-        # Dispatch automated payment receipt email
+        # 3. Dispatch automated Indunix branded payment receipt email
         try:
             user_res = await db.execute(select(User).where(User.id == wallet.user_id))
             user = user_res.scalar_one_or_none()
@@ -325,7 +373,7 @@ class PaystackService:
                     amount_ngn=amount_ngn,
                     reference=reference,
                     new_balance_ngn=float(wallet.balance_ngn),
-                    channel=channel or "CARD"
+                    channel=channel or "BANK_TRANSFER"
                 )
         except Exception:
             pass

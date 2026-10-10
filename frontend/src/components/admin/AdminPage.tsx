@@ -30,8 +30,21 @@ import {
   Megaphone,
   CreditCard,
   Building,
+  ArrowUpRight,
+  Wallet,
+  Scale,
+  Receipt,
+  ShieldCheck,
 } from 'lucide-react';
-import { api, User, AdminUserItem, AdminPromoCampaigns, AdminModelPricingItem } from '../../api/client';
+import {
+  api,
+  User,
+  AdminUserItem,
+  AdminPromoCampaigns,
+  AdminModelPricingItem,
+  AdminFinancialReport,
+  DeepSeekLiveBalance,
+} from '../../api/client';
 import { formatNaira } from '../../utils/formatters';
 
 interface AdminPageProps {
@@ -57,7 +70,18 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigateHome }) => {
   const [changePasswordError, setChangePasswordError] = useState<string | null>(null);
 
   // Active Tab
-  const [activeTab, setActiveTab] = useState<'metrics' | 'users' | 'pricing' | 'promos' | 'gateway'>('metrics');
+  const [activeTab, setActiveTab] = useState<'metrics' | 'financials' | 'users' | 'pricing' | 'promos' | 'gateway'>('metrics');
+
+  // Financials & Economics State
+  const [financials, setFinancials] = useState<AdminFinancialReport | null>(null);
+  const [financialsLoading, setFinancialsLoading] = useState<boolean>(false);
+  const [savingFeePolicy, setSavingFeePolicy] = useState<boolean>(false);
+  const [feeStrategy, setFeeStrategy] = useState<'absorb' | 'pass_through'>('absorb');
+  const [feePercent, setFeePercent] = useState<number>(1.5);
+  const [flatFeeNgn, setFlatFeeNgn] = useState<number>(100.0);
+  const [feeCapNgn, setFeeCapNgn] = useState<number>(2000.0);
+  const [fxRate, setFxRate] = useState<number>(1500.0);
+  const [pingingDeepSeek, setPingingDeepSeek] = useState<boolean>(false);
 
   // Metrics
   const [metrics, setMetrics] = useState<any>(null);
@@ -122,10 +146,69 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigateHome }) => {
 
   const loadAllAdminData = async () => {
     loadMetrics();
+    loadFinancials();
     loadUsers();
     loadPricing();
     loadPromos();
     loadGatewayConfig();
+  };
+
+  const loadFinancials = async () => {
+    setFinancialsLoading(true);
+    try {
+      const res = await api.getAdminFinancials();
+      setFinancials(res);
+      if (res.deposit_fee_settings) {
+        setFeeStrategy(res.deposit_fee_settings.fee_strategy);
+        setFeePercent(res.deposit_fee_settings.fee_percent);
+        setFlatFeeNgn(res.deposit_fee_settings.flat_fee_ngn);
+        setFeeCapNgn(res.deposit_fee_settings.fee_cap_ngn);
+        setFxRate(res.deposit_fee_settings.fx_rate_usd_ngn);
+      }
+    } catch {
+      // Ignored
+    } finally {
+      setFinancialsLoading(false);
+    }
+  };
+
+  const handleSaveFeePolicy = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingFeePolicy(true);
+    try {
+      await api.updateDepositFeeSettings({
+        fee_strategy: feeStrategy,
+        fee_percent: Number(feePercent),
+        flat_fee_ngn: Number(flatFeeNgn),
+        fee_cap_ngn: Number(feeCapNgn),
+        fx_rate_usd_ngn: Number(fxRate),
+      });
+      showToast('success', `Deposit fee policy updated to ${feeStrategy === 'absorb' ? 'Absorb from Margin' : 'Pass-through to User'}.`);
+      loadFinancials();
+    } catch (err: any) {
+      showToast('error', err.message || 'Failed to update fee policy');
+    } finally {
+      setSavingFeePolicy(false);
+    }
+  };
+
+  const handlePingDeepSeek = async () => {
+    setPingingDeepSeek(true);
+    try {
+      const liveBal = await api.refreshDeepSeekBalance();
+      if (financials) {
+        setFinancials({
+          ...financials,
+          deepseek_balance: liveBal,
+          solvency_coverage_ratio: financials.user_liabilities_ngn > 0 ? Number((liveBal.balance_ngn / financials.user_liabilities_ngn).toFixed(2)) : 1.0,
+        });
+      }
+      showToast('success', `DeepSeek ping: ${liveBal.message} ($${liveBal.total_balance.toFixed(2)} USD)`);
+    } catch (err: any) {
+      showToast('error', err.message || 'Failed to ping DeepSeek balance');
+    } finally {
+      setPingingDeepSeek(false);
+    }
   };
 
   const handleAdminLogin = async (e: React.FormEvent) => {
@@ -610,8 +693,9 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigateHome }) => {
         <aside className="w-full md:w-64 shrink-0 space-y-1">
           {[
             { id: 'metrics', label: 'Platform Telemetry', icon: TrendingUp },
+            { id: 'financials', label: 'Financials & Revenue', icon: DollarSign },
             { id: 'users', label: 'User Ledger & Credits', icon: Users },
-            { id: 'pricing', label: 'Model Pricing Control', icon: DollarSign },
+            { id: 'pricing', label: 'Model Pricing Control', icon: Sliders },
             { id: 'promos', label: 'Promos & Campaign Engine', icon: Megaphone },
             { id: 'gateway', label: 'Gateway Keys & Providers', icon: Key },
           ].map((item) => {
@@ -716,7 +800,387 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigateHome }) => {
             </div>
           )}
 
-          {/* TAB 2: USER LEDGER & BONUS CREDITS */}
+          {/* TAB: FINANCIALS & REVENUE UNIT ECONOMICS */}
+          {activeTab === 'financials' && (
+            <div className="space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h2 className="font-heading text-xl font-bold text-white">Financial Inflows, Revenue & Economics</h2>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Live cash inflow accounting, Paystack transaction fees, wholesale API provider costs, and net profit margins.
+                  </p>
+                </div>
+
+                <button
+                  onClick={loadFinancials}
+                  disabled={financialsLoading}
+                  className="px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white text-xs font-semibold flex items-center gap-2 transition-all self-start sm:self-auto"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${financialsLoading ? 'animate-spin' : ''}`} />
+                  <span>Refresh Financials</span>
+                </button>
+              </div>
+
+              {/* Top 5 High-Level Financial KPI Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+                {/* 1. Gross Inflow */}
+                <div className="p-4 rounded-2xl bg-[#0D121F] border border-slate-800 shadow-sm flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between text-slate-400 text-xs mb-2">
+                      <span>Gross Cash Inflow</span>
+                      <Wallet className="w-4 h-4 text-emerald-400" />
+                    </div>
+                    <div className="text-xl font-bold text-white clean-nums">
+                      {financials ? formatNaira(financials.gross_inflow_ngn) : '...'}
+                    </div>
+                  </div>
+                  <div className="text-[10px] text-slate-500 mt-2">
+                    {financials ? `${financials.deposit_count} deposits (Avg: ${formatNaira(financials.avg_deposit_amount_ngn)})` : 'Loading...'}
+                  </div>
+                </div>
+
+                {/* 2. Gateway Fees */}
+                <div className="p-4 rounded-2xl bg-[#0D121F] border border-slate-800 shadow-sm flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between text-slate-400 text-xs mb-2">
+                      <span>Gateway Fees (Paystack)</span>
+                      <Receipt className="w-4 h-4 text-amber-400" />
+                    </div>
+                    <div className="text-xl font-bold text-amber-300 clean-nums">
+                      {financials ? formatNaira(financials.gateway_fees_ngn) : '...'}
+                    </div>
+                  </div>
+                  <div className="mt-2">
+                    <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold ${
+                      financials?.deposit_fee_settings.fee_strategy === 'absorb'
+                        ? 'bg-purple-500/15 text-purple-300 border border-purple-500/30'
+                        : 'bg-blue-500/15 text-blue-300 border border-blue-500/30'
+                    }`}>
+                      {financials?.deposit_fee_settings.fee_strategy === 'absorb' ? 'Absorbed by Indunix' : 'Paid by Users'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* 3. Recognized Revenue */}
+                <div className="p-4 rounded-2xl bg-[#0D121F] border border-slate-800 shadow-sm flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between text-slate-400 text-xs mb-2">
+                      <span>Recognized Revenue</span>
+                      <Coins className="w-4 h-4 text-sky-400" />
+                    </div>
+                    <div className="text-xl font-bold text-sky-300 clean-nums">
+                      {financials ? formatNaira(financials.recognized_revenue_ngn) : '...'}
+                    </div>
+                  </div>
+                  <div className="text-[10px] text-slate-500 mt-2">
+                    {financials ? `${financials.total_tokens_consumed.toLocaleString()} tokens billed` : 'From metered API usage'}
+                  </div>
+                </div>
+
+                {/* 4. Upstream Wholesale Cost */}
+                <div className="p-4 rounded-2xl bg-[#0D121F] border border-slate-800 shadow-sm flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between text-slate-400 text-xs mb-2">
+                      <span>Upstream COGS</span>
+                      <Cpu className="w-4 h-4 text-rose-400" />
+                    </div>
+                    <div className="text-xl font-bold text-rose-300 clean-nums">
+                      {financials ? formatNaira(financials.upstream_cogs_ngn) : '...'}
+                    </div>
+                  </div>
+                  <div className="text-[10px] text-slate-500 mt-2">
+                    {financials ? `$${financials.upstream_cogs_usd.toFixed(4)} USD @ ₦${financials.fx_rate_usd_ngn.toLocaleString()}/$` : 'DeepSeek/Groq provider cost'}
+                  </div>
+                </div>
+
+                {/* 5. Net Profit & Margin */}
+                <div className="p-4 rounded-2xl bg-[#0D121F] border border-slate-800 shadow-sm flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center justify-between text-slate-400 text-xs mb-2">
+                      <span>Net Gross Profit</span>
+                      <ArrowUpRight className="w-4 h-4 text-emerald-400" />
+                    </div>
+                    <div className="text-xl font-bold text-emerald-400 clean-nums">
+                      {financials ? formatNaira(financials.net_profit_ngn) : '...'}
+                    </div>
+                  </div>
+                  <div className="mt-2 flex items-center gap-1.5">
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                      {financials ? `${financials.net_margin_percent}% Net Margin` : '...'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Live DeepSeek Account Solvency & User Liabilities Card */}
+              <div className="p-6 rounded-2xl bg-[#0D121F] border border-slate-800 shadow-sm space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/80 pb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-purple-500/15 border border-purple-500/30 text-purple-400 flex items-center justify-center">
+                      <Scale className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-heading text-sm font-bold text-white">Live DeepSeek Upstream Account & Solvency</h3>
+                        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono font-semibold ${
+                          financials?.deepseek_balance.status === 'connected'
+                            ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
+                            : 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
+                        }`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${
+                            financials?.deepseek_balance.status === 'connected' ? 'bg-emerald-400 animate-ping' : 'bg-amber-400'
+                          }`}></span>
+                          {financials?.deepseek_balance.status === 'connected' ? 'Live API Connected' : 'Unset / Mock Sandbox'}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        Real-time upstream API balance query mapped against unspent user wallet liabilities.
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={handlePingDeepSeek}
+                    disabled={pingingDeepSeek}
+                    className="px-3 py-1.5 rounded-xl bg-purple-500/15 hover:bg-purple-500/25 border border-purple-500/30 text-purple-300 text-xs font-semibold flex items-center gap-2 transition-all shrink-0"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${pingingDeepSeek ? 'animate-spin' : ''}`} />
+                    <span>Ping DeepSeek API</span>
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1">
+                  <div className="p-4 rounded-xl bg-slate-950 border border-slate-850">
+                    <span className="text-[11px] text-slate-400 block mb-1">DeepSeek Live Balance</span>
+                    <div className="text-lg font-bold text-white clean-nums">
+                      {financials ? `$${financials.deepseek_balance.total_balance.toFixed(2)} USD` : '...'}
+                    </div>
+                    <div className="text-[11px] text-emerald-400 font-mono mt-1">
+                      ≈ {financials ? formatNaira(financials.deepseek_balance.balance_ngn) : '...'}
+                    </div>
+                  </div>
+
+                  <div className="p-4 rounded-xl bg-slate-950 border border-slate-850">
+                    <span className="text-[11px] text-slate-400 block mb-1">User Unspent Liabilities</span>
+                    <div className="text-lg font-bold text-amber-300 clean-nums">
+                      {financials ? formatNaira(financials.user_liabilities_ngn) : '...'}
+                    </div>
+                    <div className="text-[11px] text-slate-500 mt-1">
+                      Total client cash sitting in wallets
+                    </div>
+                  </div>
+
+                  <div className="p-4 rounded-xl bg-slate-950 border border-slate-850">
+                    <span className="text-[11px] text-slate-400 block mb-1">Solvency Reserve Ratio</span>
+                    <div className="text-lg font-bold text-purple-300 clean-nums">
+                      {financials ? `${(financials.solvency_coverage_ratio * 100).toFixed(1)}%` : '...'}
+                    </div>
+                    <div className="text-[11px] text-slate-500 mt-1">
+                      Upstream reserves vs total client deposits
+                    </div>
+                  </div>
+                </div>
+
+                {financials?.deepseek_balance.message && (
+                  <p className="text-[11px] text-slate-500 font-mono">
+                    Status: {financials.deepseek_balance.message}
+                  </p>
+                )}
+              </div>
+
+              {/* Deposit Fee Strategy Control */}
+              <div className="p-6 rounded-2xl bg-[#0D121F] border border-slate-800 shadow-sm space-y-4">
+                <div>
+                  <h3 className="font-heading text-sm font-bold text-white">Deposit Fee Accounting Policy</h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Configure whether Paystack payment gateway fees are absorbed from profit margins or passed to the customer.
+                  </p>
+                </div>
+
+                <form onSubmit={handleSaveFeePolicy} className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {/* Strategy Option A: Absorb */}
+                    <label className={`p-4 rounded-xl border cursor-pointer transition-all flex items-start gap-3 ${
+                      feeStrategy === 'absorb'
+                        ? 'bg-emerald-500/10 border-emerald-500/40 text-white'
+                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
+                    }`}>
+                      <input
+                        type="radio"
+                        name="fee_strategy"
+                        value="absorb"
+                        checked={feeStrategy === 'absorb'}
+                        onChange={() => setFeeStrategy('absorb')}
+                        className="mt-1 text-emerald-500 focus:ring-0"
+                      />
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-white">Absorb from Profit Margin</span>
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-mono bg-emerald-500/20 text-emerald-300">
+                            Recommended for Growth
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-400 leading-relaxed">
+                          Developers receive 100% of deposited Naira. Indunix AI absorbs the ~1.5% gateway fee from its ~80% token margin, eliminating user friction.
+                        </p>
+                      </div>
+                    </label>
+
+                    {/* Strategy Option B: Pass-Through */}
+                    <label className={`p-4 rounded-xl border cursor-pointer transition-all flex items-start gap-3 ${
+                      feeStrategy === 'pass_through'
+                        ? 'bg-blue-500/10 border-blue-500/40 text-white'
+                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:border-slate-700'
+                    }`}>
+                      <input
+                        type="radio"
+                        name="fee_strategy"
+                        value="pass_through"
+                        checked={feeStrategy === 'pass_through'}
+                        onChange={() => setFeeStrategy('pass_through')}
+                        className="mt-1 text-blue-500 focus:ring-0"
+                      />
+                      <div className="space-y-1">
+                        <span className="text-xs font-bold text-white">Charge Gateway Fee to User</span>
+                        <p className="text-[11px] text-slate-400 leading-relaxed">
+                          Paystack gateway processing fee is deducted from the deposit or added at checkout, preserving 100% of Indunix token gross margin.
+                        </p>
+                      </div>
+                    </label>
+                  </div>
+
+                  {/* Fee Parameter Inputs */}
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 pt-2">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-400 mb-1">
+                        Paystack Fee (%)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        value={feePercent}
+                        onChange={(e) => setFeePercent(parseFloat(e.target.value) || 0)}
+                        className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white outline-none focus:border-emerald-500 font-mono"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-400 mb-1">
+                        Flat Fee (₦)
+                      </label>
+                      <input
+                        type="number"
+                        value={flatFeeNgn}
+                        onChange={(e) => setFlatFeeNgn(parseFloat(e.target.value) || 0)}
+                        className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white outline-none focus:border-emerald-500 font-mono"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-semibold text-slate-400 mb-1">
+                        Fee Cap (₦)
+                      </label>
+                      <input
+                        type="number"
+                        value={feeCapNgn}
+                        onChange={(e) => setFeeCapNgn(parseFloat(e.target.value) || 0)}
+                        className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white outline-none focus:border-emerald-500 font-mono"
+                      />
+                    </div>
+
+                    <div className="col-span-2 sm:col-span-2">
+                      <label className="block text-[11px] font-semibold text-slate-400 mb-1">
+                        USD/NGN Exchange Benchmark (₦)
+                      </label>
+                      <div className="flex gap-2">
+                        <input
+                          type="number"
+                          value={fxRate}
+                          onChange={(e) => setFxRate(parseFloat(e.target.value) || 1500)}
+                          className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-white outline-none focus:border-emerald-500 font-mono"
+                        />
+                        <button
+                          type="submit"
+                          disabled={savingFeePolicy}
+                          className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs shrink-0 transition-all flex items-center gap-1.5"
+                        >
+                          {savingFeePolicy ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <ShieldCheck className="w-3.5 h-3.5" />}
+                          <span>Save Policy</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </form>
+              </div>
+
+              {/* Model-by-Model Unit Economics Table */}
+              <div className="p-6 rounded-2xl bg-[#0D121F] border border-slate-800 shadow-sm space-y-4">
+                <div>
+                  <h3 className="font-heading text-sm font-bold text-white">Model Unit Economics & Margin Breakdown</h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Breakdown of retail Naira revenue vs upstream wholesale provider cost (DeepSeek) across sovereign models.
+                  </p>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="border-b border-slate-800 bg-slate-900/60 text-slate-400 uppercase font-mono text-[10px]">
+                        <th className="py-3 px-4">Model Tier</th>
+                        <th className="py-3 px-4">Inferences</th>
+                        <th className="py-3 px-4">Tokens Metered</th>
+                        <th className="py-3 px-4">Retail Revenue (Billed)</th>
+                        <th className="py-3 px-4">Wholesale COGS (DeepSeek)</th>
+                        <th className="py-3 px-4">Gross Profit</th>
+                        <th className="py-3 px-4 text-right">Profit Margin</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-850">
+                      {financials?.model_economics && financials.model_economics.length > 0 ? (
+                        financials.model_economics.map((item) => (
+                          <tr key={item.model_id} className="hover:bg-slate-900/40 transition-colors">
+                            <td className="py-3.5 px-4">
+                              <div className="font-bold text-white">{item.model_name}</div>
+                              <div className="text-[10px] text-slate-500 font-mono">{item.model_id}</div>
+                            </td>
+                            <td className="py-3.5 px-4 font-mono text-slate-300 clean-nums">
+                              {item.requests.toLocaleString()}
+                            </td>
+                            <td className="py-3.5 px-4 font-mono text-slate-300 clean-nums">
+                              {item.total_tokens.toLocaleString()}
+                            </td>
+                            <td className="py-3.5 px-4 font-mono text-sky-400 font-bold clean-nums">
+                              {formatNaira(item.retail_revenue_ngn)}
+                            </td>
+                            <td className="py-3.5 px-4 font-mono text-rose-400 clean-nums">
+                              {formatNaira(item.upstream_cost_ngn)}
+                              <span className="text-[10px] text-slate-500 ml-1">(${item.upstream_cost_usd.toFixed(4)})</span>
+                            </td>
+                            <td className="py-3.5 px-4 font-mono text-emerald-400 font-bold clean-nums">
+                              {formatNaira(item.gross_profit_ngn)}
+                            </td>
+                            <td className="py-3.5 px-4 text-right">
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                                {item.margin_percent}%
+                              </span>
+                            </td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={7} className="py-6 text-center text-slate-500">
+                            No model inference data recorded yet.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 3: USER LEDGER & BONUS CREDITS */}
           {activeTab === 'users' && (
             <div className="space-y-6">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">

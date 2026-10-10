@@ -75,3 +75,35 @@ async def test_paystack_deposit_and_webhook():
         )
         assert prov_res.status_code == 200
 
+        # Test direct Dedicated Account Bank Transfer (NO pre-existing transaction reference)
+        dva_ref = f"dva_transfer_{uuid.uuid4().hex[:10]}"
+        dva_webhook_body = {
+            "event": "charge.success",
+            "data": {
+                "reference": dva_ref,
+                "amount": 50000, # 500 NGN in kobo
+                "channel": "dedicated_nuban",
+                "customer": {"email": email, "customer_code": "CUS_test_123"},
+                "dedicated_account": {"account_number": "9998887776"}
+            }
+        }
+        dva_bytes = json.dumps(dva_webhook_body).encode("utf-8")
+        dva_sig = hmac.new(
+            settings.PAYSTACK_SECRET_KEY.encode("utf-8"),
+            dva_bytes,
+            hashlib.sha512
+        ).hexdigest()
+
+        dva_hook_res = await client.post(
+            "/api/billing/webhook",
+            content=dva_bytes,
+            headers={"x-paystack-signature": dva_sig, "Content-Type": "application/json"}
+        )
+        assert dva_hook_res.status_code == 200
+        assert dva_hook_res.json()["status"] == "success"
+
+        # Verify wallet credited by additional ₦500
+        wallet_res2 = await client.get("/api/billing/wallet", headers=headers)
+        wallet2 = wallet_res2.json()
+        assert wallet2["balance_ngn"] == 5500.0
+

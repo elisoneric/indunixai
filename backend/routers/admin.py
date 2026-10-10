@@ -26,6 +26,10 @@ from backend.schemas.admin import (
     AdminPromoCampaigns,
     AdminPromoCampaignsUpdate,
     AdminUserListItem,
+    ModelUnitEconomics,
+    DeepSeekLiveBalance,
+    DepositFeeSettings,
+    AdminFinancialReport,
 )
 from backend.services.email_service import email_service
 
@@ -563,3 +567,276 @@ async def update_admin_config(
         "updated_fields": updated_fields,
         "live_production_mode": not settings.MOCK_UPSTREAM_IF_UNSET
     }
+
+# =========================================================================
+# 7. Financial Inflows, Revenue, Profitability & DeepSeek Live Balance
+# =========================================================================
+
+WHOLESALE_RATES_USD_PER_M = {
+    "indunix-1-spark": {"prompt": 0.05, "completion": 0.08, "name": "Indunix 1 Spark (Ultra Fast)"},
+    "axion-1-spark": {"prompt": 0.05, "completion": 0.08, "name": "Indunix 1 Spark (Ultra Fast)"},
+    "indunix-1-core": {"prompt": 0.14, "completion": 0.28, "name": "Indunix 1 Core (DeepSeek-V3)"},
+    "axion-1-core": {"prompt": 0.14, "completion": 0.28, "name": "Indunix 1 Core (DeepSeek-V3)"},
+    "indunix-1-reason": {"prompt": 0.55, "completion": 2.19, "name": "Indunix 1 Reason (DeepSeek-R1)"},
+    "axion-1-reason": {"prompt": 0.55, "completion": 2.19, "name": "Indunix 1 Reason (DeepSeek-R1)"},
+}
+
+async def fetch_deepseek_balance(fx_rate: float = 1500.0) -> DeepSeekLiveBalance:
+    """Queries live DeepSeek user balance from official API."""
+    api_key = settings.DEEPSEEK_API_KEY
+    if not api_key or "mock" in api_key.lower():
+        return DeepSeekLiveBalance(
+            status="unconfigured" if not api_key else "mock",
+            is_available=False,
+            currency="USD",
+            total_balance=0.0,
+            granted_balance=0.0,
+            topped_up_balance=0.0,
+            balance_ngn=0.0,
+            message="No live DeepSeek API key configured. Enter key in Gateway tab to view live balance."
+        )
+
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=8.0) as client:
+            resp = await client.get(
+                "https://api.deepseek.com/user/balance",
+                headers={"Authorization": f"Bearer {api_key}", "Accept": "application/json"}
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                infos = data.get("balance_infos", [])
+                if infos:
+                    info = infos[0]
+                    total_bal = float(info.get("total_balance", 0.0))
+                    curr = info.get("currency", "USD")
+                    bal_ngn = round(total_bal * (fx_rate if curr == "USD" else fx_rate / 7.2), 2)
+                    return DeepSeekLiveBalance(
+                        status="connected",
+                        is_available=bool(data.get("is_available", True)),
+                        currency=curr,
+                        total_balance=total_bal,
+                        granted_balance=float(info.get("granted_balance", 0.0)),
+                        topped_up_balance=float(info.get("topped_up_balance", 0.0)),
+                        balance_ngn=bal_ngn,
+                        message="Live DeepSeek API connection active"
+                    )
+            return DeepSeekLiveBalance(
+                status="error",
+                is_available=False,
+                currency="USD",
+                total_balance=0.0,
+                granted_balance=0.0,
+                topped_up_balance=0.0,
+                balance_ngn=0.0,
+                message=f"DeepSeek returned HTTP {resp.status_code}"
+            )
+    except Exception as e:
+        return DeepSeekLiveBalance(
+            status="network_error",
+            is_available=False,
+            currency="USD",
+            total_balance=0.0,
+            granted_balance=0.0,
+            topped_up_balance=0.0,
+            balance_ngn=0.0,
+            message=str(e)
+        )
+
+@router.get("/financials", response_model=AdminFinancialReport)
+async def get_admin_financials(
+    user: User = Depends(get_current_admin_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Returns complete platform unit economics:
+    - Inflows (Paystack gross deposits, payment gateway processing fees, net credits)
+    - Recognized revenue from metered API usage
+    - Upstream wholesale COGS (DeepSeek / Groq costs)
+    - Gross & Net profit margins
+    - Live DeepSeek balance & user liabilities (solvency coverage ratio)
+    - Model-by-model profitability breakdown
+    """
+    # 1. Load Deposit Fee & FX Settings
+    fee_setting = await db.get(SystemSetting, "deposit_fee_settings")
+    fee_cfg = DepositFeeSettings(**fee_setting.value_json) if fee_setting and fee_setting.value_json else DepositFeeSettings()
+
+    # 2. Inflows & Gateway Fees (Transactions)
+    deposit_channels = [TransactionChannel.CARD.value, TransactionChannel.BANK_TRANSFER.value, TransactionChannel.USSD.value, "CARD", "BANK_TRANSFER", "USSD"]
+    stmt_tx = select(Transaction).where(
+        Transaction.status == TransactionStatus.SUCCESS,
+        Transaction.channel.in_(deposit_channels)
+    )
+    tx_res = await db.execute(stmt_tx)
+    transactions = tx_res.scalars().all()
+
+    gross_inflow = 0.0
+    gateway_fees = 0.0
+    deposit_count = len(transactions)
+
+    for tx in transactions:
+        amt = float(tx.amount_ngn)
+        gross_inflow += amt
+        # Calculate Paystack fee for transaction
+        if amt < fee_cfg.flat_fee_threshold_ngn:
+            fee = amt * (fee_cfg.fee_percent / 100.0)
+        else:
+            fee = min(fee_cfg.fee_cap_ngn, (amt * (fee_cfg.fee_percent / 100.0)) + fee_cfg.flat_fee_ngn)
+        gateway_fees += fee
+
+    if fee_cfg.fee_strategy == "pass_through":
+        net_inflow_credited = max(0.0, gross_inflow - gateway_fees)
+    else:
+        net_inflow_credited = gross_inflow
+
+    avg_deposit = (gross_inflow / deposit_count) if deposit_count > 0 else 0.0
+
+    # 3. Usage & Recognized Revenue
+    stmt_usage = select(
+        UsageLog.model_requested,
+        func.count(UsageLog.id).label("requests"),
+        func.sum(UsageLog.prompt_tokens).label("prompt_tokens"),
+        func.sum(UsageLog.completion_tokens).label("completion_tokens"),
+        func.sum(UsageLog.total_tokens).label("total_tokens"),
+        func.sum(UsageLog.cost_deducted_ngn).label("revenue_ngn")
+    ).group_by(UsageLog.model_requested)
+
+    usage_res = await db.execute(stmt_usage)
+    usage_rows = usage_res.all()
+
+    total_recognized_revenue = 0.0
+    total_tokens_consumed = 0
+    total_requests = 0
+    total_upstream_cogs_usd = 0.0
+    total_upstream_cogs_ngn = 0.0
+
+    model_economics: List[ModelUnitEconomics] = []
+
+    for row in usage_rows:
+        m_id = row.model_requested
+        reqs = int(row.requests or 0)
+        p_toks = int(row.prompt_tokens or 0)
+        c_toks = int(row.completion_tokens or 0)
+        t_toks = int(row.total_tokens or 0)
+        rev_ngn = float(row.revenue_ngn or 0.0)
+
+        rates = WHOLESALE_RATES_USD_PER_M.get(m_id, {"prompt": 0.14, "completion": 0.28, "name": m_id})
+        cost_usd = (p_toks / 1_000_000.0 * rates["prompt"]) + (c_toks / 1_000_000.0 * rates["completion"])
+        cost_ngn = cost_usd * fee_cfg.fx_rate_usd_ngn
+
+        profit_ngn = rev_ngn - cost_ngn
+        margin_pct = (profit_ngn / rev_ngn * 100.0) if rev_ngn > 0 else 0.0
+
+        total_recognized_revenue += rev_ngn
+        total_tokens_consumed += t_toks
+        total_requests += reqs
+        total_upstream_cogs_usd += cost_usd
+        total_upstream_cogs_ngn += cost_ngn
+
+        model_economics.append(ModelUnitEconomics(
+            model_id=m_id,
+            model_name=rates.get("name", m_id),
+            requests=reqs,
+            prompt_tokens=p_toks,
+            completion_tokens=c_toks,
+            total_tokens=t_toks,
+            retail_revenue_ngn=round(rev_ngn, 2),
+            upstream_cost_usd=round(cost_usd, 4),
+            upstream_cost_ngn=round(cost_ngn, 2),
+            gross_profit_ngn=round(profit_ngn, 2),
+            margin_percent=round(margin_pct, 1)
+        ))
+
+    # Also list default models even if 0 usage yet
+    known_models = ["indunix-1-spark", "indunix-1-core", "indunix-1-reason"]
+    active_m_ids = {m.model_id for m in model_economics}
+    for k in known_models:
+        if k not in active_m_ids:
+            rates = WHOLESALE_RATES_USD_PER_M[k]
+            model_economics.append(ModelUnitEconomics(
+                model_id=k,
+                model_name=rates["name"],
+                requests=0,
+                prompt_tokens=0,
+                completion_tokens=0,
+                total_tokens=0,
+                retail_revenue_ngn=0.0,
+                upstream_cost_usd=0.0,
+                upstream_cost_ngn=0.0,
+                gross_profit_ngn=0.0,
+                margin_percent=0.0
+            ))
+
+    # 4. Profitability & Economics
+    gross_profit = total_recognized_revenue - total_upstream_cogs_ngn
+    gross_margin_pct = (gross_profit / total_recognized_revenue * 100.0) if total_recognized_revenue > 0 else 0.0
+
+    # Net Profit considers absorbed gateway processing fees
+    absorbed_gateway_fees = gateway_fees if fee_cfg.fee_strategy == "absorb" else 0.0
+    net_profit = gross_profit - absorbed_gateway_fees
+    net_margin_pct = (net_profit / total_recognized_revenue * 100.0) if total_recognized_revenue > 0 else 0.0
+
+    # 5. Live DeepSeek Balance & Solvency Coverage
+    deepseek_bal = await fetch_deepseek_balance(fee_cfg.fx_rate_usd_ngn)
+
+    liabilities_res = await db.execute(select(func.sum(Wallet.balance_ngn)))
+    user_liabilities = float(liabilities_res.scalar() or 0.0)
+
+    solvency_ratio = (deepseek_bal.balance_ngn / user_liabilities) if user_liabilities > 0 else 1.0
+
+    return AdminFinancialReport(
+        gross_inflow_ngn=round(gross_inflow, 2),
+        gateway_fees_ngn=round(gateway_fees, 2),
+        net_inflow_credited_ngn=round(net_inflow_credited, 2),
+        deposit_count=deposit_count,
+        avg_deposit_amount_ngn=round(avg_deposit, 2),
+        recognized_revenue_ngn=round(total_recognized_revenue, 2),
+        total_tokens_consumed=total_tokens_consumed,
+        total_requests=total_requests,
+        upstream_cogs_usd=round(total_upstream_cogs_usd, 4),
+        upstream_cogs_ngn=round(total_upstream_cogs_ngn, 2),
+        fx_rate_usd_ngn=fee_cfg.fx_rate_usd_ngn,
+        gross_profit_ngn=round(gross_profit, 2),
+        gross_margin_percent=round(gross_margin_pct, 1),
+        net_profit_ngn=round(net_profit, 2),
+        net_margin_percent=round(net_margin_pct, 1),
+        deepseek_balance=deepseek_bal,
+        user_liabilities_ngn=round(user_liabilities, 2),
+        solvency_coverage_ratio=round(solvency_ratio, 2),
+        deposit_fee_settings=fee_cfg,
+        model_economics=model_economics
+    )
+
+@router.put("/financials/deposit-fee-settings", response_model=DepositFeeSettings)
+async def update_deposit_fee_settings(
+    payload: DepositFeeSettings,
+    user: User = Depends(get_current_admin_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Updates platform deposit fee strategy:
+    - absorb: Indunix AI absorbs gateway fee (deducted from gross margin - recommended)
+    - pass_through: User pays gateway fee at checkout
+    - Configures fee percentage, flat fee, threshold, and USD/NGN FX rate.
+    """
+    setting = await db.get(SystemSetting, "deposit_fee_settings")
+    cfg_data = payload.model_dump()
+
+    if not setting:
+        setting = SystemSetting(key="deposit_fee_settings", value_json=cfg_data)
+        db.add(setting)
+    else:
+        setting.value_json = cfg_data
+
+    await db.commit()
+    return DepositFeeSettings(**cfg_data)
+
+@router.post("/financials/refresh-deepseek-balance", response_model=DeepSeekLiveBalance)
+async def refresh_deepseek_balance_endpoint(
+    user: User = Depends(get_current_admin_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Triggers an immediate live ping to the DeepSeek API balance endpoint."""
+    fee_setting = await db.get(SystemSetting, "deposit_fee_settings")
+    fx_rate = fee_setting.value_json.get("fx_rate_usd_ngn", 1500.0) if fee_setting and fee_setting.value_json else 1500.0
+    return await fetch_deepseek_balance(fx_rate)

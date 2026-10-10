@@ -162,6 +162,29 @@ export const BillingModal: React.FC<BillingModalProps> = ({
     setTimeout(() => setCopiedAccount(false), 2000);
   };
 
+  const [syncingTransfers, setSyncingTransfers] = useState(false);
+  const [syncNotice, setSyncNotice] = useState<string | null>(null);
+
+  const handleSyncTransfers = async () => {
+    setSyncingTransfers(true);
+    setSyncNotice(null);
+    setError(null);
+    try {
+      const res = await api.syncBankTransfers();
+      if (res.credited_count > 0) {
+        setSyncNotice(`Successfully credited ${res.credited_count} transfer(s) (+₦${res.total_credited_ngn.toLocaleString()}) to your wallet!`);
+        onSuccess();
+      } else {
+        setSyncNotice('All bank transfers are up to date. No pending uncredited transfers found.');
+        onSuccess();
+      }
+    } catch (err: any) {
+      setError(err.message || 'Unable to sync bank transfers at this time.');
+    } finally {
+      setSyncingTransfers(false);
+    }
+  };
+
   // Launch Paystack in New Tab and await confirmation
   const handlePaystackCheckout = async () => {
     if (amount < 1000) {
@@ -491,17 +514,32 @@ export const BillingModal: React.FC<BillingModalProps> = ({
                       </div>
                     </div>
 
-                    <p className="text-center text-[11px] text-slate-400">
-                      Automated wallet credit upon transfer settlement.
-                    </p>
+                    {syncNotice && (
+                      <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs flex items-start gap-2">
+                        <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                        <span>{syncNotice}</span>
+                      </div>
+                    )}
 
-                    <button
-                      onClick={onSuccess}
-                      className="w-full py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-semibold text-xs transition-all flex items-center justify-center gap-2 border border-slate-700"
-                    >
-                      <RefreshCw className="w-3.5 h-3.5" />
-                      <span>Refresh Balance</span>
-                    </button>
+                    <div className="flex flex-col gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={handleSyncTransfers}
+                        disabled={syncingTransfers}
+                        className="w-full py-2.5 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20 disabled:opacity-50"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${syncingTransfers ? 'animate-spin' : ''}`} />
+                        <span>{syncingTransfers ? 'Checking for Bank Transfers...' : 'Sync & Credit Recent Transfers'}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={onSuccess}
+                        className="w-full py-2 px-4 rounded-xl text-slate-400 hover:text-white hover:bg-slate-900 font-medium text-xs transition-all flex items-center justify-center gap-1.5"
+                      >
+                        <span>Done & Return to Console</span>
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   /* Provisioning KYC Form if Paystack requires identification */

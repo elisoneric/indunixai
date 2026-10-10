@@ -104,26 +104,30 @@ async def verify_transaction(
 ):
     """
     Verifies transaction status directly against Paystack gateway and credits user wallet.
+    Supports verifying both web checkout sessions and direct Dedicated Account bank transfers.
     """
     result = await db.execute(select(Transaction).where(Transaction.reference == reference))
     tx = result.scalar_one_or_none()
-    if not tx:
-        raise HTTPException(status_code=404, detail="Transaction reference not found")
 
-    if tx.status == TransactionStatus.SUCCESS:
-        return {"status": "success", "message": "Transaction already verified", "reference": reference}
+    if tx and tx.status == TransactionStatus.SUCCESS:
+        return {"status": "success", "message": "Transaction already verified", "reference": reference, "amount_ngn": float(tx.amount_ngn)}
 
     paystack_res = await paystack_service.verify_with_paystack_api(reference)
     if paystack_res.get("status") == "success":
-        amount = paystack_res.get("amount_ngn") or float(tx.amount_ngn)
+        amount = paystack_res.get("amount_ngn") or (float(tx.amount_ngn) if tx else 0.0)
+        channel = paystack_res.get("channel") or (tx.channel if tx else "BANK_TRANSFER")
         success, msg = await paystack_service.process_successful_charge(
             db=db,
             reference=reference,
             amount_ngn=round(amount, 2),
-            channel=paystack_res.get("channel", tx.channel),
-            metadata=paystack_res.get("metadata", {})
+            channel=channel,
+            metadata=paystack_res.get("metadata", {}),
+            user_id=user.id
         )
-        return {"status": "success", "message": msg, "reference": reference, "amount_ngn": amount}
+        if success:
+            return {"status": "success", "message": msg, "reference": reference, "amount_ngn": amount}
+        else:
+            return {"status": "error", "message": msg, "reference": reference}
     else:
         return {"status": "pending", "message": paystack_res.get("error") or "Payment pending or unconfirmed by gateway", "reference": reference}
 
@@ -155,6 +159,67 @@ async def provision_virtual_account(
     )
     return account_info
 
+@router.post("/sync-bank-transfers")
+async def sync_bank_transfers(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Actively queries Paystack for recent bank transfers made to this user's dedicated account,
+    ensuring any transfers not yet credited via webhook are immediately processed.
+    """
+    secret_key = settings.PAYSTACK_SECRET_KEY
+    if not secret_key:
+        return {"status": "error", "message": "Paystack gateway is not configured"}
+
+    wallet_res = await db.execute(select(Wallet).where(Wallet.user_id == user.id))
+    wallet = wallet_res.scalar_one_or_none()
+    if not wallet:
+        return {"status": "error", "message": "Wallet not found"}
+
+    credited_count = 0
+    total_credited_ngn = 0.0
+
+    try:
+        import httpx
+        headers = {"Authorization": f"Bearer {secret_key}", "Content-Type": "application/json"}
+        param = f"customer={wallet.paystack_customer_code}" if wallet.paystack_customer_code else f"customer={user.email}"
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(f"{settings.PAYSTACK_BASE_URL}/transaction?{param}&perPage=20", headers=headers)
+            if resp.status_code == 200:
+                tx_list = resp.json().get("data", [])
+                for item in tx_list:
+                    if item.get("status") == "success":
+                        ref = item.get("reference")
+                        amt_kobo = item.get("amount", 0)
+                        amt_ngn = round(amt_kobo / 100.0, 2)
+                        if ref and amt_ngn > 0:
+                            check_res = await db.execute(select(Transaction).where(Transaction.reference == ref))
+                            existing_tx = check_res.scalar_one_or_none()
+                            if not existing_tx or existing_tx.status != TransactionStatus.SUCCESS:
+                                success, _ = await paystack_service.process_successful_charge(
+                                    db=db,
+                                    reference=ref,
+                                    amount_ngn=amt_ngn,
+                                    channel=item.get("channel", "BANK_TRANSFER").upper(),
+                                    metadata=item,
+                                    user_id=user.id
+                                )
+                                if success:
+                                    credited_count += 1
+                                    total_credited_ngn += amt_ngn
+
+        await db.refresh(wallet)
+        msg = f"Synced successfully. {credited_count} new transfer(s) credited (₦{total_credited_ngn:,.2f})." if credited_count > 0 else "All bank transfers are up to date."
+        return {
+            "status": "success",
+            "message": msg,
+            "credited_count": credited_count,
+            "total_credited_ngn": total_credited_ngn,
+            "new_balance_ngn": float(wallet.balance_ngn)
+        }
+    except Exception as e:
+        return {"status": "error", "message": f"Sync failed: {str(e)}"}
 
 @router.get("/transactions", response_model=List[TransactionOut])
 async def list_transactions(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
