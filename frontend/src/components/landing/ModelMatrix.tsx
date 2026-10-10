@@ -1,12 +1,14 @@
 import React from 'react';
 import { Zap, Brain, Shield, Sparkles, Check, ArrowRight } from 'lucide-react';
+import { formatNaira } from '../../utils/formatters';
 
 interface ModelMatrixProps {
   onSelectModel: (modelId: string) => void;
   onContactSales?: () => void;
+  pricingRateCard?: Record<string, { prompt_per_million: number; completion_per_million: number }>;
 }
 
-export const ModelMatrix: React.FC<ModelMatrixProps> = ({ onSelectModel, onContactSales }) => {
+export const ModelMatrix: React.FC<ModelMatrixProps> = ({ onSelectModel, onContactSales, pricingRateCard }) => {
   const models = [
     {
       id: 'indunix-1-spark',
@@ -14,7 +16,9 @@ export const ModelMatrix: React.FC<ModelMatrixProps> = ({ onSelectModel, onConta
       tagline: 'High-Concurrency Business Ops',
       badge: 'Sub-Second',
       color: 'emerald',
-      pricing: '₦1,200.00',
+      pricing: pricingRateCard?.['indunix-1-spark']?.completion_per_million
+        ? formatNaira(pricingRateCard['indunix-1-spark'].completion_per_million)
+        : '₦1,200.00',
       period: 'per 1M tokens',
       context: '128k Context',
       description: 'Ultra-low latency engine for 24/7 corporate customer support bots, automated CRM intake, real-time lead qualification, and high-frequency business messaging.',
@@ -32,7 +36,9 @@ export const ModelMatrix: React.FC<ModelMatrixProps> = ({ onSelectModel, onConta
       tagline: 'Enterprise Reasoning & Operations',
       badge: 'Most Popular',
       color: 'cyan',
-      pricing: '₦1,800.00',
+      pricing: pricingRateCard?.['indunix-1-core']?.completion_per_million
+        ? formatNaira(pricingRateCard['indunix-1-core'].completion_per_million)
+        : '₦1,800.00',
       period: 'per 1M tokens',
       context: '64k Context',
       description: 'Our flagship corporate intelligence tier for drafting executive reports, analyzing commercial contracts, employee onboarding workflows, and operational decision-making.',
@@ -50,7 +56,9 @@ export const ModelMatrix: React.FC<ModelMatrixProps> = ({ onSelectModel, onConta
       tagline: 'Executive Strategy & Financial Audit',
       badge: 'Deep Cognitive',
       color: 'violet',
-      pricing: '₦3,200.00',
+      pricing: pricingRateCard?.['indunix-1-reason']?.completion_per_million
+        ? formatNaira(pricingRateCard['indunix-1-reason'].completion_per_million)
+        : '₦3,200.00',
       period: 'per 1M tokens',
       context: '64k Context',
       description: 'Extended deliberative reasoning model for forensic balance sheet audits, investment underwriting, board-level strategic planning, and regulatory compliance.',

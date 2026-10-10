@@ -7,9 +7,10 @@ import { MarkdownRenderer } from '../common/MarkdownRenderer';
 interface LivePlaygroundProps {
   selectedModelId?: string;
   onRefreshWallet?: () => void;
+  pricingRateCard?: Record<string, { prompt_per_million: number; completion_per_million: number }>;
 }
 
-export const LivePlayground: React.FC<LivePlaygroundProps> = ({ selectedModelId = 'indunix-1-core', onRefreshWallet }) => {
+export const LivePlayground: React.FC<LivePlaygroundProps> = ({ selectedModelId = 'indunix-1-core', onRefreshWallet, pricingRateCard }) => {
   const [model, setModel] = useState<string>(selectedModelId);
   const [prompt, setPrompt] = useState<string>(
     'Analyze Q3 operational performance across our business units. Identify revenue leakages, operating expense overhead, and draft a 4-point executive action plan for the Board of Directors.'
@@ -78,7 +79,7 @@ export const LivePlayground: React.FC<LivePlaygroundProps> = ({ selectedModelId 
   };
 
   const costEstimatedNgn = () => {
-    const ratePerM = model === 'indunix-1-spark' ? 1200 : model === 'indunix-1-core' ? 1800 : 3200;
+    const ratePerM = pricingRateCard?.[model]?.completion_per_million || (model === 'indunix-1-spark' ? 1200 : model === 'indunix-1-core' ? 1800 : 3200);
     const promptTokens = Math.max(1, Math.ceil(prompt.length / 4));
     const total = promptTokens + tokensGenerated;
     return (total / 1_000_000) * ratePerM;

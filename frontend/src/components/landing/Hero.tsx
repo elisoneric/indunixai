@@ -129,23 +129,23 @@ console.log(completion.choices[0].message.content);`,
         {/* Interactive Code Window Chrome - Grok/x.ai Style */}
         <div className="max-w-3xl mx-auto rounded-2xl border border-white/[0.08] bg-[#0A0D14] shadow-2xl overflow-hidden">
           {/* Window Title Bar */}
-          <div className="px-5 py-3 bg-white/[0.03] border-b border-white/[0.06] flex items-center justify-between">
-            <div className="flex items-center gap-2">
+          <div className="px-3 sm:px-5 py-2.5 sm:py-3 bg-white/[0.03] border-b border-white/[0.06] flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
               <span className="w-2.5 h-2.5 rounded-full bg-[#FF5F56]" />
               <span className="w-2.5 h-2.5 rounded-full bg-[#FFBD2E]" />
               <span className="w-2.5 h-2.5 rounded-full bg-[#27C93F]" />
-              <span className="ml-2 text-xs font-mono text-zinc-500">api.indunixai.com/v1</span>
+              <span className="ml-1 text-[11px] font-mono text-zinc-500 hidden md:inline">api.indunixai.com/v1</span>
             </div>
 
             {/* Language Switcher Tabs */}
-            <div className="flex items-center bg-white/[0.04] p-1 rounded-full border border-white/[0.06]">
+            <div className="flex items-center bg-white/[0.04] p-0.5 sm:p-1 rounded-full border border-white/[0.06] shrink-0">
               {(['python', 'node', 'curl'] as const).map(tab => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
-                  className={`px-3 py-0.5 text-xs font-mono rounded-full transition-all ${
+                  className={`px-2 sm:px-3 py-0.5 text-[11px] sm:text-xs font-mono rounded-full transition-all ${
                     activeTab === tab
-                      ? 'bg-white text-black font-semibold'
+                      ? 'bg-white text-black font-semibold shadow-sm'
                       : 'text-zinc-400 hover:text-white'
                   }`}
                 >
@@ -157,7 +157,7 @@ console.log(completion.choices[0].message.content);`,
             {/* Copy Button */}
             <button
               onClick={handleCopy}
-              className="flex items-center gap-1.5 px-3 py-1 text-xs font-mono text-zinc-400 hover:text-white bg-white/[0.04] hover:bg-white/[0.08] rounded-full transition-colors"
+              className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1 text-[11px] sm:text-xs font-mono text-zinc-400 hover:text-white bg-white/[0.04] hover:bg-white/[0.08] rounded-full transition-colors shrink-0"
             >
               {copied ? (
                 <>

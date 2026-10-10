@@ -127,18 +127,18 @@ export const Navbar: React.FC<NavbarProps> = ({
           </button>
 
           {user ? (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
               {/* Wallet Pill */}
               <div 
                 onClick={onOpenDeposit}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.04] border border-emerald-500/30 hover:border-emerald-400 cursor-pointer transition-all"
+                className="flex items-center gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full bg-white/[0.04] border border-emerald-500/30 hover:border-emerald-400 cursor-pointer transition-all"
                 title="Deposit Naira credits"
               >
-                <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                <span className="text-xs font-mono font-medium text-emerald-300">
+                <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                <span className="text-[11px] sm:text-xs font-mono font-medium text-emerald-300">
                   {wallet ? formatNaira(wallet.total_available_ngn) : '₦1,000.00'}
                 </span>
-                <span className="text-[10px] font-mono text-zinc-400 hover:text-white ml-0.5">
+                <span className="hidden sm:inline text-[10px] font-mono text-zinc-400 hover:text-white ml-0.5">
                   + Top Up
                 </span>
               </div>
@@ -146,11 +146,11 @@ export const Navbar: React.FC<NavbarProps> = ({
               {/* Console Button */}
               <button
                 onClick={() => onNavigate('console')}
-                className={`btn-pill-primary flex items-center gap-1.5 ${
+                className={`btn-pill-primary flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-4 py-1 sm:py-1.5 text-xs ${
                   currentPage === 'console' ? 'ring-2 ring-emerald-400' : ''
                 }`}
               >
-                <Terminal className="w-3.5 h-3.5" />
+                <Terminal className="w-3.5 h-3.5 shrink-0" />
                 <span>Console</span>
               </button>
             </div>

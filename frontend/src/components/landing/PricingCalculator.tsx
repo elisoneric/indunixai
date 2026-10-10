@@ -4,9 +4,10 @@ import { formatNaira } from '../../utils/formatters';
 
 interface PricingCalculatorProps {
   onStartFree: () => void;
+  pricingRateCard?: Record<string, { prompt_per_million: number; completion_per_million: number }>;
 }
 
-export const PricingCalculator: React.FC<PricingCalculatorProps> = ({ onStartFree }) => {
+export const PricingCalculator: React.FC<PricingCalculatorProps> = ({ onStartFree, pricingRateCard }) => {
   const [dailyRequests, setDailyRequests] = useState<number>(1500);
   const [tokensPerRequest, setTokensPerRequest] = useState<number>(1200);
 
@@ -14,8 +15,9 @@ export const PricingCalculator: React.FC<PricingCalculatorProps> = ({ onStartFre
   const monthlyRequests = dailyRequests * 30;
   const monthlyTokens = monthlyRequests * tokensPerRequest;
 
-  // Indunix 1 Core rate: ₦1,800 per 1M tokens
-  const indunixMonthlyNgn = (monthlyTokens / 1_000_000) * 1800;
+  // Indunix 1 Core dynamic rate per 1M tokens
+  const coreRate = pricingRateCard?.['indunix-1-core']?.completion_per_million || 1800;
+  const indunixMonthlyNgn = (monthlyTokens / 1_000_000) * coreRate;
 
   // Traditional manual business operations cost: ~₦150 per operational task/ticket
   const humanCostPerDoc = 150;

@@ -1724,7 +1724,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigateHome }) => {
                       value={promos.banner_text}
                       onChange={(e) => setPromos({ ...promos, banner_text: e.target.value })}
                       className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 focus:border-emerald-500 text-white text-xs outline-none"
-                      placeholder="⚡ Flash Sale: 20% off all Indunix AI sovereign models this weekend!"
+                      placeholder="Flash Sale: 20% off all Indunix AI sovereign models this weekend"
                     />
                   </div>
                 </div>

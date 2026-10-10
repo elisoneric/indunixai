@@ -216,26 +216,26 @@ export const ConsoleLayout: React.FC<ConsoleLayoutProps> = ({
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Cleaner Top Header with Section Dropdown & Mobile Responsiveness */}
-        <header className="h-14 px-4 sm:px-6 border-b border-slate-800/80 bg-[#080B11]/95 backdrop-blur-md flex items-center justify-between sticky top-0 z-30">
-          <div className="flex items-center gap-2.5">
+        <header className="h-14 px-3 sm:px-6 border-b border-slate-800/80 bg-[#080B11]/95 backdrop-blur-md flex items-center justify-between sticky top-0 z-30 min-w-0">
+          <div className="flex items-center gap-1.5 sm:gap-2.5 min-w-0">
             {/* Mobile Hamburger Toggle */}
             <button
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-              className="md:hidden p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-850"
+              className="md:hidden p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-850 shrink-0"
               title="Open Navigation"
             >
               <Menu className="w-5 h-5" />
             </button>
 
             {/* Clean Section Switcher Dropdown */}
-            <div className="relative">
+            <div className="relative min-w-0">
               <button
                 onClick={() => setIsNavDropdownOpen(!isNavDropdownOpen)}
-                className="flex items-center gap-2 px-2.5 py-1.5 rounded-xl hover:bg-slate-850 text-white font-heading font-semibold text-xs sm:text-sm transition-all"
+                className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-2.5 py-1.5 rounded-xl hover:bg-slate-850 text-white font-heading font-semibold text-xs sm:text-sm transition-all"
               >
-                <CurrentIcon className="w-4 h-4 text-emerald-400" />
-                <span>{currentNavItem.label}</span>
-                <ChevronDown className="w-3.5 h-3.5 text-slate-500" />
+                <CurrentIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-400 shrink-0" />
+                <span className="truncate max-w-[80px] xs:max-w-[120px] sm:max-w-none">{currentNavItem.label}</span>
+                <ChevronDown className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-slate-500 shrink-0" />
               </button>
 
               {isNavDropdownOpen && (
@@ -272,13 +272,13 @@ export const ConsoleLayout: React.FC<ConsoleLayoutProps> = ({
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5 sm:gap-3">
+          <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
             {/* Refresh Button to fetch new records */}
             <button
               onClick={handleRefresh}
               disabled={isRefreshing}
               title="Refresh Records"
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white transition-all text-xs font-medium disabled:opacity-50"
+              className="flex items-center gap-1.5 p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl bg-slate-900 border border-slate-800 hover:border-slate-700 text-slate-300 hover:text-white transition-all text-xs font-medium disabled:opacity-50 shrink-0"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-emerald-400' : 'text-slate-400'}`} />
               <span className="hidden sm:inline">Refresh</span>
@@ -287,14 +287,14 @@ export const ConsoleLayout: React.FC<ConsoleLayoutProps> = ({
             {/* Wallet Balance Widget */}
             <div
               onClick={onOpenDeposit}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900 border border-emerald-500/30 hover:border-emerald-500 cursor-pointer transition-all shadow-sm group"
+              className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1 sm:py-1.5 rounded-xl bg-slate-900 border border-emerald-500/30 hover:border-emerald-500 cursor-pointer transition-all shadow-sm group shrink-0"
             >
-              <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              <span className="text-xs text-slate-400">Credits:</span>
-              <span className="text-xs font-bold text-emerald-300 clean-nums">
+              <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+              <span className="text-[11px] sm:text-xs text-slate-400 hidden xs:inline">Credits:</span>
+              <span className="text-[11px] sm:text-xs font-bold text-emerald-300 clean-nums">
                 {wallet ? formatNaira(wallet.total_available_ngn) : '₦1,000.00'}
               </span>
-              <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded font-bold group-hover:bg-emerald-500 group-hover:text-slate-950 transition-colors">
+              <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded font-bold group-hover:bg-emerald-500 group-hover:text-slate-950 transition-colors hidden sm:inline">
                 + Deposit
               </span>
             </div>

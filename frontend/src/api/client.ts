@@ -544,33 +544,35 @@ export const api = {
     onError: (err: string) => void
   ) {
     const token = localStorage.getItem('indunix_token') || localStorage.getItem('axion_token');
-    // If user has not logged in yet, prompt them or register instant guest demo token
-    let authHeaderValue = token ? `Bearer ${token}` : '';
 
+    // Unauthenticated visitors: simulate real-time streaming directly in-memory without creating accounts or touching localStorage
     if (!token) {
-      // Auto register or login guest demo user so the landing page playground works instantly!
-      try {
-        const guestEmail = `guest.${Date.now()}@indunixai.com`;
-        const guestRes = await fetch(`${API_BASE}/api/auth/register`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            email: guestEmail,
-            password: 'GuestPassword123!',
-            full_name: 'Interactive Visitor',
-            company_name: 'Visitor Demo'
-          })
-        });
-        if (guestRes.ok) {
-          const guestData = await guestRes.json();
-          localStorage.setItem('indunix_token', guestData.access_token);
-          localStorage.setItem('indunix_user', JSON.stringify(guestData.user));
-          authHeaderValue = `Bearer ${guestData.access_token}`;
-        }
-      } catch (e) {
-        console.warn('Guest account creation failed:', e);
+      const demoResponse = `### Executive Operational Assessment
+
+**Model:** ${model}
+**Inference Latency:** 14ms (Lagos Edge Node)
+**Settlement Currency:** Nigerian Naira (NGN Native)
+
+1. **Analysis & Metrics:**
+   System diagnostic report confirms 100% throughput availability across sovereign inference endpoints. Zero foreign exchange markup applied.
+
+2. **Action Directive:**
+   - Integrate standard OpenAI client SDK pointing to the official gateway.
+   - Enforce programmatic token budget limits across workspace API keys.
+   - Access real-time billing logs in your Developer Console.
+
+*Sign in or create a developer account to execute live production queries.*`;
+
+      const words = demoResponse.split(' ');
+      for (let i = 0; i < words.length; i++) {
+        await new Promise((r) => setTimeout(r, 20));
+        onChunk((i === 0 ? '' : ' ') + words[i]);
       }
+      onDone();
+      return;
     }
+
+    const authHeaderValue = `Bearer ${token}`;
 
     try {
       const response = await fetch(`${API_BASE}/v1/chat/completions`, {
@@ -818,6 +820,22 @@ export const api = {
       banner_text: '',
     };
     return res.json();
+  },
+
+  async getPublicPricing(): Promise<Record<string, { prompt_per_million: number; completion_per_million: number; name?: string; description?: string; context_window?: number }>> {
+    try {
+      const res = await fetch(`${API_BASE}/api/auth/pricing`);
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch {
+      // Fallback to standard rate card
+    }
+    return {
+      'indunix-1-spark': { prompt_per_million: 950, completion_per_million: 1200, name: 'Indunix 1 Spark', context_window: 128000 },
+      'indunix-1-core': { prompt_per_million: 1500, completion_per_million: 1800, name: 'Indunix 1 Core', context_window: 64000 },
+      'indunix-1-reason': { prompt_per_million: 2800, completion_per_million: 3200, name: 'Indunix 1 Reason', context_window: 64000 },
+    };
   },
 
   async getAdminFinancials(): Promise<AdminFinancialReport> {

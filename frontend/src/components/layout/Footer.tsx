@@ -249,8 +249,6 @@ export const Footer: React.FC<FooterProps> = ({
             >
               Terms of Service
             </button>
-            <span>api.indunixai.com</span>
-            <span>indunixai.com</span>
           </div>
         </div>
       </div>

@@ -29,6 +29,7 @@ export function App() {
   const [transactions, setTransactions] = useState<TransactionItem[]>([]);
   const [logs, setLogs] = useState<UsageLogItem[]>([]);
   const [promotions, setPromotions] = useState<any>(null);
+  const [pricingRateCard, setPricingRateCard] = useState<Record<string, any>>({});
 
   // Modals & Pages
   const [isAuthOpen, setIsAuthOpen] = useState<boolean>(false);
@@ -153,6 +154,14 @@ export function App() {
 
   useEffect(() => {
     api.getPublicPromotions().then(setPromotions).catch(() => {});
+    api.getPublicPricing().then(setPricingRateCard).catch(() => {});
+
+    // Ensure legacy cached visitor dummy account in localStorage is cleanly purged
+    const saved = api.getUser();
+    if (saved && (saved.email?.startsWith('guest.') || saved.full_name === 'Interactive Visitor')) {
+      api.logout();
+      setUser(null);
+    }
   }, []);
 
 
@@ -224,7 +233,6 @@ export function App() {
       {/* Dynamic Public Promo Announcement Banner */}
       {promotions?.banner_active && promotions?.banner_text && currentPage !== 'admin' && currentPage !== 'console' && (
         <aside aria-label="Announcement" className="bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-600 text-slate-950 px-4 py-2 text-center text-xs font-bold tracking-wide shadow-md flex items-center justify-center gap-2 relative z-50">
-          <span>⚡</span>
           <span>{promotions.banner_text}</span>
         </aside>
       )}
@@ -428,16 +436,19 @@ export function App() {
             />
 
             <ModelMatrix 
+              pricingRateCard={pricingRateCard}
               onSelectModel={handleSelectModelFromMatrix} 
               onContactSales={() => setIsSalesContactOpen(true)}
             />
 
             <LivePlayground
+              pricingRateCard={pricingRateCard}
               selectedModelId={selectedModelId}
               onRefreshWallet={refreshUserData}
             />
 
             <PricingCalculator
+              pricingRateCard={pricingRateCard}
               onStartFree={() => {
                 if (user) {
                   handleNavigate('console');

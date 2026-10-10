@@ -44,6 +44,22 @@ async def get_public_promotions(db: AsyncSession = Depends(get_db)):
         "banner_text": ""
     }
 
+@router.get("/pricing")
+async def get_public_pricing(db: AsyncSession = Depends(get_db)):
+    """Public endpoint to fetch active model pricing rate card in Nigerian Naira."""
+    import copy
+    from backend.models.system_setting import SystemSetting
+    from backend.core.config import settings
+    setting = await db.get(SystemSetting, "model_pricing")
+    res = copy.deepcopy(settings.RATE_CARD_NGN)
+    if setting and setting.value_json:
+        for m_id, m_data in setting.value_json.items():
+            if m_id in res:
+                res[m_id].update(m_data)
+            else:
+                res[m_id] = m_data
+    return res
+
 async def _get_signup_bonus(db: AsyncSession) -> float:
     from backend.models.system_setting import SystemSetting
     setting = await db.get(SystemSetting, "promo_campaigns")
