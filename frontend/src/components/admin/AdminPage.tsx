@@ -1780,10 +1780,28 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigateHome }) => {
                         type="text"
                         value={smtpSettings?.host || ''}
                         onChange={(e) => setSmtpSettings(prev => prev ? { ...prev, host: e.target.value } : null)}
-                        placeholder="e.g. mail.indunixai.com or smtp.gmail.com"
+                        placeholder="sbg106.truehost.cloud or webmail.indunixai.com"
                         required
                         className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white text-xs outline-none focus:border-emerald-500 font-mono"
                       />
+                      <div className="flex items-center gap-2 mt-1">
+                        <span className="text-[10px] text-slate-400">cPanel Host:</span>
+                        <button
+                          type="button"
+                          onClick={() => setSmtpSettings(prev => prev ? { ...prev, host: 'sbg106.truehost.cloud', port: 465, use_ssl: true } : null)}
+                          className="text-[10px] text-emerald-400 hover:underline font-mono"
+                        >
+                          sbg106.truehost.cloud
+                        </button>
+                        <span className="text-slate-600">•</span>
+                        <button
+                          type="button"
+                          onClick={() => setSmtpSettings(prev => prev ? { ...prev, host: 'webmail.indunixai.com', port: 465, use_ssl: true } : null)}
+                          className="text-[10px] text-emerald-400 hover:underline font-mono"
+                        >
+                          webmail.indunixai.com
+                        </button>
+                      </div>
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-slate-300 mb-1">
@@ -1796,7 +1814,7 @@ export const AdminPage: React.FC<AdminPageProps> = ({ onNavigateHome }) => {
                         required
                         className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-white text-xs outline-none focus:border-emerald-500 font-mono"
                       />
-                      <span className="text-[10px] text-slate-500 mt-1 block">465 (SSL) or 587 (TLS)</span>
+                      <span className="text-[10px] text-emerald-400/90 mt-1 block">Port 465 (SSL) active on cPanel</span>
                     </div>
                   </div>
 

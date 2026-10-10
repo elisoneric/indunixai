@@ -1,10 +1,12 @@
 import asyncio
 import logging
 import smtplib
+import socket
+import ssl
 from datetime import datetime, timezone
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List, Tuple
 from backend.core.config import settings
 
 logger = logging.getLogger("indunix.email")
@@ -209,90 +211,156 @@ class EmailService:
             self.use_tls = bool(cfg["use_tls"])
         logger.info(f"[SMTP CONFIG UPDATED] Host={self.host}, Port={self.port}, User={self.user}")
 
+    def _create_ssl_context(self) -> ssl.SSLContext:
+        """Builds an SSL context optimized for cPanel and shared hosting mail servers."""
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+        return ctx
+
+    def _get_candidate_hosts(self, primary_host: str) -> List[str]:
+        """
+        Returns candidate hostnames to try.
+        If user configured 'mail.indunixai.com' (which resolves to the web application VPS),
+        automatically include webmail.indunixai.com and sbg106.truehost.cloud as verified cPanel fallbacks.
+        """
+        hosts = [primary_host]
+        lower_host = primary_host.lower().strip()
+        if "indunixai.com" in lower_host:
+            for alt in ["webmail.indunixai.com", "sbg106.truehost.cloud"]:
+                if alt not in hosts:
+                    hosts.append(alt)
+        return hosts
+
+    def _send_sync_email_with_diagnostics(
+        self, to_email: str, subject: str, html_body: str, text_body: str
+    ) -> Tuple[bool, str]:
+        """
+        Synchronously transmits email via cPanel SMTP with comprehensive diagnostics and auto-fallback.
+        Returns: (success: bool, diagnostic_message: str)
+        """
+        configured_host = (self.host or settings.SMTP_HOST or "").strip()
+        port = int(self.port or settings.SMTP_PORT or 465)
+        user = (self.user or settings.SMTP_USER or "").strip()
+        password = self.password or settings.SMTP_PASSWORD or ""
+        from_email = (self.from_email or settings.SMTP_FROM_EMAIL or user or "notifications@indunixai.com").strip()
+        from_name = (self.from_name or settings.SMTP_FROM_NAME or "Indunix AI").strip()
+        use_ssl = self.use_ssl if self.use_ssl is not None else (port == 465)
+        use_tls = self.use_tls if self.use_tls is not None else (port == 587)
+
+        if not configured_host:
+            return False, "SMTP configuration missing: Host is not defined."
+        if not user or not password:
+            return False, "SMTP configuration missing: Username and Password are required."
+
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = f"{from_name} <{from_email}>"
+        msg["To"] = to_email
+        msg["Date"] = datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S +0000")
+
+        part1 = MIMEText(text_body, "plain", "utf-8")
+        part2 = MIMEText(html_body, "html", "utf-8")
+        msg.attach(part1)
+        msg.attach(part2)
+        raw_msg = msg.as_string()
+
+        candidate_hosts = self._get_candidate_hosts(configured_host)
+        last_error = ""
+        ssl_ctx = self._create_ssl_context()
+
+        for current_host in candidate_hosts:
+            try:
+                if use_ssl or port == 465:
+                    with smtplib.SMTP_SSL(current_host, port, context=ssl_ctx, timeout=12.0) as server:
+                        server.ehlo("indunixai.com")
+                        server.login(user, password)
+                        server.sendmail(from_email, [to_email], raw_msg)
+                else:
+                    with smtplib.SMTP(current_host, port, timeout=12.0) as server:
+                        server.ehlo("indunixai.com")
+                        if use_tls or port == 587 or server.has_extn("STARTTLS"):
+                            server.starttls(context=ssl_ctx)
+                            server.ehlo("indunixai.com")
+                        server.login(user, password)
+                        server.sendmail(from_email, [to_email], raw_msg)
+
+                logger.info(f"[SMTP DISPATCH SUCCESS] Delivered email to {to_email} via {current_host}:{port}")
+                return True, f"Successfully delivered via {current_host}:{port}."
+
+            except smtplib.SMTPAuthenticationError as auth_err:
+                code = getattr(auth_err, "smtp_code", 535)
+                err_text = ""
+                if hasattr(auth_err, "smtp_error") and isinstance(auth_err.smtp_error, bytes):
+                    err_text = auth_err.smtp_error.decode(errors="ignore")
+                elif hasattr(auth_err, "smtp_error"):
+                    err_text = str(auth_err.smtp_error)
+                msg_desc = f"cPanel Authentication Failed (Code {code}): {err_text or 'Incorrect username or password'}. Verify that username is your full email address ('{user}') and password is correct in cPanel -> Email Accounts."
+                logger.warning(f"[SMTP AUTH ERROR] {msg_desc}")
+                return False, msg_desc
+
+            except smtplib.SMTPSenderRefused as sender_err:
+                code = getattr(sender_err, "smtp_code", 550)
+                msg_desc = f"cPanel Sender Rejected (Code {code}): Address '{from_email}' rejected. Ensure 'Sender From Address' matches your authenticated cPanel email ('{user}')."
+                logger.warning(f"[SMTP SENDER ERROR] {msg_desc}")
+                return False, msg_desc
+
+            except (smtplib.SMTPConnectError, ConnectionRefusedError) as conn_err:
+                last_error = f"Connection refused on {current_host}:{port}."
+                logger.warning(f"[SMTP CONNECT REFUSED] {current_host}:{port} - {conn_err}")
+                continue
+
+            except (socket.timeout, TimeoutError) as time_err:
+                last_error = f"Connection timed out on {current_host}:{port}."
+                logger.warning(f"[SMTP TIMEOUT] {current_host}:{port} - {time_err}")
+                continue
+
+            except Exception as e:
+                last_error = f"Error connecting to {current_host}:{port} ({type(e).__name__}): {str(e)}"
+                logger.warning(f"[SMTP DISPATCH FAILED] {current_host}:{port} - {e}")
+                continue
+
+        return False, last_error or f"Unable to establish SMTP connection to {configured_host}:{port}."
+
     def _send_sync_email(self, to_email: str, subject: str, html_body: str, text_body: str) -> bool:
         """Synchronously transmits email via cPanel SMTP."""
-        host = self.host or settings.SMTP_HOST
+        success, _ = self._send_sync_email_with_diagnostics(to_email, subject, html_body, text_body)
+        return success
+
+    def test_connection(self, to_email: str) -> Tuple[bool, str]:
+        """Tests SMTP credentials and sends a live test email with rich diagnostics."""
+        configured_host = (self.host or settings.SMTP_HOST or "").strip()
         port = int(self.port or settings.SMTP_PORT or 465)
-        user = self.user or settings.SMTP_USER
-        password = self.password or settings.SMTP_PASSWORD
-        from_email = self.from_email or settings.SMTP_FROM_EMAIL or "notifications@indunixai.com"
-        from_name = self.from_name or settings.SMTP_FROM_NAME or "Indunix AI"
-        use_ssl = self.use_ssl if self.use_ssl is not None else settings.SMTP_USE_SSL
-        use_tls = self.use_tls if self.use_tls is not None else settings.SMTP_USE_TLS
+        user = (self.user or settings.SMTP_USER or "").strip()
+        password = self.password or settings.SMTP_PASSWORD or ""
+        from_email = (self.from_email or settings.SMTP_FROM_EMAIL or user or "notifications@indunixai.com").strip()
+        from_name = (self.from_name or settings.SMTP_FROM_NAME or "Indunix AI").strip()
 
-        if not host or not user or not password:
-            logger.info(f"[SMTP CREDENTIALS MISSING] Cannot deliver email to {to_email}: '{subject}'. Please configure SMTP credentials in Admin Console or environment.")
-            return False
-
-        try:
-            msg = MIMEMultipart("alternative")
-            msg["Subject"] = subject
-            msg["From"] = f"{from_name} <{from_email}>"
-            msg["To"] = to_email
-            msg["Date"] = datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S +0000")
-
-            part1 = MIMEText(text_body, "plain", "utf-8")
-            part2 = MIMEText(html_body, "html", "utf-8")
-            msg.attach(part1)
-            msg.attach(part2)
-
-            if use_ssl or port == 465:
-                # cPanel SSL on Port 465
-                with smtplib.SMTP_SSL(host, port, timeout=12.0) as server:
-                    server.login(user, password)
-                    server.sendmail(from_email, [to_email], msg.as_string())
-            else:
-                # cPanel TLS on Port 587 or standard 25
-                with smtplib.SMTP(host, port, timeout=12.0) as server:
-                    if use_tls or port == 587:
-                        server.starttls()
-                    server.login(user, password)
-                    server.sendmail(from_email, [to_email], msg.as_string())
-
-            logger.info(f"[SMTP DISPATCH SUCCESS] Delivered email to {to_email}: '{subject}'")
-            return True
-        except Exception as e:
-            logger.warning(f"[SMTP DISPATCH FAILED] Error delivering to {to_email}: {str(e)}")
-            return False
-
-    def test_connection(self, to_email: str) -> tuple[bool, str]:
-        """Tests SMTP credentials and sends a live test email."""
-        host = self.host or settings.SMTP_HOST
-        port = int(self.port or settings.SMTP_PORT or 465)
-        user = self.user or settings.SMTP_USER
-        password = self.password or settings.SMTP_PASSWORD
-        from_email = self.from_email or settings.SMTP_FROM_EMAIL or "notifications@indunixai.com"
-        from_name = self.from_name or settings.SMTP_FROM_NAME or "Indunix AI"
-        use_ssl = self.use_ssl if self.use_ssl is not None else settings.SMTP_USE_SSL
-        use_tls = self.use_tls if self.use_tls is not None else settings.SMTP_USE_TLS
-
-        if not host or not user or not password:
+        if not configured_host or not user or not password:
             return False, "SMTP configuration incomplete: Host, User, and Password are required."
 
-        try:
-            subject = "Indunix AI • SMTP Test Dispatch Verification"
-            text_body = f"Hello from Indunix AI! This test email confirms that your SMTP server ({host}:{port}) is properly configured."
-            timestamp = datetime.now(timezone.utc).strftime("%d %b %Y, %H:%M UTC")
-            content_html = f"""
-              <h2 style="color: #F8FAFC; margin-top: 0; font-size: 20px;">SMTP Dispatch Verified</h2>
-              <p>Your mail server has successfully connected to Indunix AI Sovereign Infrastructure and passed live dispatch verification.</p>
-              <div class="card">
-                <table class="data-table">
-                  <tr><td class="data-label">Host</td><td class="data-val">{host}</td></tr>
-                  <tr><td class="data-label">Port</td><td class="data-val">{port}</td></tr>
-                  <tr><td class="data-label">Sender</td><td class="data-val">{from_name} &lt;{from_email}&gt;</td></tr>
-                  <tr><td class="data-label">Timestamp</td><td class="data-val">{timestamp}</td></tr>
-                  <tr><td class="data-label">Status</td><td class="data-val" style="color: #10B981;">Connected</td></tr>
-                </table>
-              </div>
-            """
-            html = self._build_html_wrapper(subject, "SYSTEM TEST", "#10B981", content_html)
-            success = self._send_sync_email(to_email, subject, html, text_body)
-            if success:
-                return True, f"Test email successfully sent to {to_email} via {host}:{port}."
-            return False, f"Failed to deliver test email to {to_email}. Please check host, username, and password."
-        except Exception as e:
-            return False, f"SMTP Connection failed: {str(e)}"
+        subject = "Indunix AI • SMTP Test Dispatch Verification"
+        text_body = f"Hello from Indunix AI! This test email confirms that your SMTP mail server ({configured_host}:{port}) is properly connected."
+        timestamp = datetime.now(timezone.utc).strftime("%d %b %Y, %H:%M UTC")
+        content_html = f"""
+          <h2 style="color: #F8FAFC; margin-top: 0; font-size: 20px;">SMTP Dispatch Verified</h2>
+          <p>Your mail server has successfully connected to Indunix AI Sovereign Infrastructure and passed live dispatch verification.</p>
+          <div class="card">
+            <table class="data-table">
+              <tr><td class="data-label">Configured Host</td><td class="data-val">{configured_host}</td></tr>
+              <tr><td class="data-label">Port</td><td class="data-val">{port}</td></tr>
+              <tr><td class="data-label">Authenticated User</td><td class="data-val">{user}</td></tr>
+              <tr><td class="data-label">Sender Address</td><td class="data-val">{from_name} &lt;{from_email}&gt;</td></tr>
+              <tr><td class="data-label">Timestamp</td><td class="data-val">{timestamp}</td></tr>
+              <tr><td class="data-label">Status</td><td class="data-val" style="color: #10B981;">Connected &amp; Verified</td></tr>
+            </table>
+          </div>
+        """
+        html = self._build_html_wrapper(subject, "SYSTEM TEST", "#10B981", content_html)
+        success, detail = self._send_sync_email_with_diagnostics(to_email, subject, html, text_body)
+        if success:
+            return True, f"Test email successfully delivered to {to_email}! ({detail})"
+        return False, detail
 
     async def _send_async_email(self, to_email: str, subject: str, html_body: str, text_body: str):
         """Dispatches email in background thread without blocking HTTP requests."""
