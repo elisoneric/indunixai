@@ -84,16 +84,26 @@ export const BillingModal: React.FC<BillingModalProps> = ({
     }
   }, [isOpen, activeTab, loading, verifying, pendingTx, successInfo, amount]);
 
-  // Dynamically load Paystack Inline JS script
+  // Auto-poll transaction status every 4 seconds while pendingTx is active
   useEffect(() => {
-    if (!document.getElementById('paystack-inline-js')) {
-      const script = document.createElement('script');
-      script.id = 'paystack-inline-js';
-      script.src = 'https://js.paystack.co/v1/inline.js';
-      script.async = true;
-      document.body.appendChild(script);
-    }
-  }, []);
+    if (!pendingTx || successInfo) return;
+    const interval = setInterval(async () => {
+      try {
+        const res = await api.verifyTransaction(pendingTx.reference);
+        if (res.status === 'success') {
+          setSuccessInfo({
+            amount: res.amount_ngn || pendingTx.amount_ngn,
+            reference: pendingTx.reference,
+          });
+          setPendingTx(null);
+          onSuccess();
+        }
+      } catch {
+        // Continue polling silently
+      }
+    }, 4000);
+    return () => clearInterval(interval);
+  }, [pendingTx, successInfo, onSuccess]);
 
   // Fetch virtual account when switching to Virtual Account tab
   useEffect(() => {
@@ -120,6 +130,10 @@ export const BillingModal: React.FC<BillingModalProps> = ({
 
   const handleProvisionKYC = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!phone || phone.trim().length < 10) {
+      setError('Please enter a valid Nigerian phone number (e.g. 08038984606).');
+      return;
+    }
     if (!ninOrBvn || ninOrBvn.trim().length < 11) {
       setError('Please provide a valid 11-digit NIN or BVN.');
       return;
@@ -148,7 +162,7 @@ export const BillingModal: React.FC<BillingModalProps> = ({
     setTimeout(() => setCopiedAccount(false), 2000);
   };
 
-  // Launch Paystack Inline Popup or Fallback
+  // Launch Paystack in New Tab and await confirmation
   const handlePaystackCheckout = async () => {
     if (amount < 1000) {
       setError('Minimum deposit is ₦1,000.00');
@@ -160,36 +174,11 @@ export const BillingModal: React.FC<BillingModalProps> = ({
     try {
       const initRes = await api.initializeDeposit(amount, 'CARD');
       setPendingTx(initRes);
+      setLoading(false);
 
-      const paystackPop = (window as any).PaystackPop;
-      const userEmail = user?.email || 'developer@indunixai.com';
-      const userFullName = user?.full_name || 'Indunix Developer';
-
-      // Check if Paystack Inline popup object is available and public key exists
-      if (paystackPop && initRes.public_key && (initRes.public_key.startsWith('pk_live_') || initRes.public_key.startsWith('pk_test_'))) {
-        const handler = paystackPop.setup({
-          key: initRes.public_key,
-          email: userEmail,
-          amount: Math.round(amount * 100), // in kobo
-          ref: initRes.reference,
-          currency: 'NGN',
-          firstname: userFullName.split(' ')[0] || 'Developer',
-          lastname: userFullName.split(' ').slice(1).join(' ') || 'Account',
-          callback: function (response: any) {
-            handleVerifyPayment(response.reference || initRes.reference, amount);
-          },
-          onClose: function () {
-            setLoading(false);
-          },
-        });
-        handler.openIframe();
-        setLoading(false);
-      } else {
-        // Fallback: Open Paystack standard secure checkout window
-        if (initRes.authorization_url) {
-          window.open(initRes.authorization_url, '_blank');
-        }
-        setLoading(false);
+      if (initRes.authorization_url) {
+        // Open Paystack checkout directly in a new tab without white-screen iframe issues
+        window.open(initRes.authorization_url, '_blank', 'noopener,noreferrer');
       }
     } catch (err: any) {
       setError(err.message || 'Payment initialization failed');
@@ -283,10 +272,10 @@ export const BillingModal: React.FC<BillingModalProps> = ({
 
             <div>
               <h3 className="font-heading text-xl font-bold text-white">
-                Verifying {formatNaira(pendingTx.amount_ngn)}
+                Payment Session Active
               </h3>
-              <p className="text-xs text-slate-400 mt-1">
-                Complete payment in the Paystack modal or window, then confirm below.
+              <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+                Paystack checkout has opened in a new tab. Complete your payment and your wallet will credit automatically.
               </p>
             </div>
 
@@ -299,9 +288,12 @@ export const BillingModal: React.FC<BillingModalProps> = ({
                 <span className="text-slate-400">Transaction Reference:</span>
                 <span className="text-emerald-400 font-mono text-[11px]">{pendingTx.reference}</span>
               </div>
-              <div className="flex justify-between">
+              <div className="flex justify-between items-center">
                 <span className="text-slate-400">Gateway Status:</span>
-                <span className="text-amber-400 font-semibold">Awaiting Bank Confirmation</span>
+                <span className="text-amber-400 font-semibold flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping inline-block"></span>
+                  Listening for Settlement...
+                </span>
               </div>
             </div>
 
@@ -313,6 +305,17 @@ export const BillingModal: React.FC<BillingModalProps> = ({
             )}
 
             <div className="flex flex-col gap-2 pt-2">
+              {pendingTx.authorization_url && (
+                <button
+                  type="button"
+                  onClick={() => window.open(pendingTx.authorization_url, '_blank', 'noopener,noreferrer')}
+                  className="w-full py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-semibold text-xs transition-all flex items-center justify-center gap-2 border border-slate-700"
+                >
+                  <ExternalLink className="w-4 h-4 text-emerald-400" />
+                  <span>Reopen Paystack Checkout in New Tab</span>
+                </button>
+              )}
+
               <button
                 onClick={() => handleVerifyPayment(pendingTx.reference, pendingTx.amount_ngn)}
                 disabled={verifying}
@@ -326,17 +329,20 @@ export const BillingModal: React.FC<BillingModalProps> = ({
                 ) : (
                   <>
                     <CheckCircle className="w-4 h-4" />
-                    <span>I Have Completed Payment — Verify</span>
+                    <span>I Have Completed Payment — Verify Now</span>
                   </>
                 )}
               </button>
 
               <button
-                onClick={() => handlePaystackCheckout()}
-                className="w-full py-2.5 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium text-xs transition-all flex items-center justify-center gap-2 border border-slate-700"
+                type="button"
+                onClick={() => {
+                  setPendingTx(null);
+                  setError(null);
+                }}
+                className="w-full py-2 px-4 rounded-xl text-slate-400 hover:text-white hover:bg-slate-900 font-medium text-xs transition-all"
               >
-                <RefreshCw className="w-3.5 h-3.5" />
-                <span>Retry Checkout Session</span>
+                Cancel or Choose Another Amount
               </button>
             </div>
           </div>

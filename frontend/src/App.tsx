@@ -96,10 +96,29 @@ export function App() {
     };
   }, []);
 
+  const handleAuthSuccess = async () => {
+    const savedUser = api.getUser();
+    if (savedUser) {
+      setUser(savedUser);
+    }
+    setCurrentPage('console');
+    const host = window.location.hostname.toLowerCase();
+    if (!host.startsWith('console.') && !host.startsWith('app.')) {
+      window.history.pushState(null, '', '/console');
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    await refreshUserData();
+  };
+
   const handleNavigate = (page: 'landing' | 'console' | 'docs' | 'privacy' | 'terms' | 'auth' | 'admin') => {
-    if (page === 'console' && !user) {
+    const currentUser = user || api.getUser();
+    if (page === 'console' && !currentUser) {
       handleOpenAuth('login');
       return;
+    }
+    if (page === 'console' && !user && currentUser) {
+      setUser(currentUser);
+      refreshUserData();
     }
     
     setCurrentPage(page);
@@ -213,10 +232,10 @@ export function App() {
       {currentPage === 'admin' ? (
         /* Isolated Master System Administration Console (/admin) */
         <AdminPage onNavigateHome={() => handleNavigate('landing')} />
-      ) : currentPage === 'console' && user ? (
+      ) : currentPage === 'console' && (user || api.getUser()) ? (
         /* Authenticated Developer Console View */
         <ConsoleLayout
-          user={user}
+          user={user || api.getUser()!}
           wallet={wallet}
           summary={summary}
           keys={keys}
@@ -367,10 +386,7 @@ export function App() {
         /* Dedicated Full-Page Auth Experience (/login & /register) */
         <AuthPage
           initialMode={authMode}
-          onSuccess={() => {
-            refreshUserData();
-            handleNavigate('console');
-          }}
+          onSuccess={handleAuthSuccess}
           onNavigateHome={() => handleNavigate('landing')}
           onSwitchMode={(mode) => setAuthMode(mode)}
           onOpenPrivacy={() => handleNavigate('privacy')}

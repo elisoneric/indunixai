@@ -144,8 +144,15 @@ class PaystackService:
 
         try:
             headers = {"Authorization": f"Bearer {secret_key}", "Content-Type": "application/json"}
-            async with httpx.AsyncClient(timeout=12.0) as client:
-                # 1. Create or fetch customer on Paystack
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                # 1. Normalize Nigerian phone number format (e.g. 2348038984606 -> 08038984606)
+                clean_phone = (phone or "").strip().replace(" ", "").replace("-", "")
+                if clean_phone.startswith("+234"):
+                    clean_phone = "0" + clean_phone[4:]
+                elif clean_phone.startswith("234") and len(clean_phone) >= 13:
+                    clean_phone = "0" + clean_phone[3:]
+
+                # 2. Create or fetch customer record on Paystack
                 name_parts = (user.full_name or "Enterprise User").split()
                 first_name = name_parts[0]
                 last_name = " ".join(name_parts[1:]) if len(name_parts) > 1 else "Tech"
@@ -154,12 +161,20 @@ class PaystackService:
                     "first_name": first_name,
                     "last_name": last_name
                 }
-                if phone:
-                    cust_payload["phone"] = phone
+                if clean_phone:
+                    cust_payload["phone"] = clean_phone
+
+                cust_code = wallet.paystack_customer_code if wallet else None
 
                 cust_res = await client.post(f"{self.base_url}/customer", json=cust_payload, headers=headers)
-                cust_data = cust_res.json().get("data", {}) if cust_res.status_code in (200, 201) else {}
-                cust_code = cust_data.get("customer_code") or (wallet.paystack_customer_code if wallet else None)
+                if cust_res.status_code in (200, 201):
+                    cust_data = cust_res.json().get("data", {})
+                    cust_code = cust_data.get("customer_code") or cust_code
+                else:
+                    # If customer already exists on Paystack, fetch customer code by email
+                    fetch_res = await client.get(f"{self.base_url}/customer/{user.email}", headers=headers)
+                    if fetch_res.status_code == 200:
+                        cust_code = fetch_res.json().get("data", {}).get("customer_code") or cust_code
 
                 if not cust_code:
                     err_msg = cust_res.json().get("message", "Unable to create or locate customer record on Paystack.")
@@ -169,30 +184,64 @@ class PaystackService:
                     wallet.paystack_customer_code = cust_code
                     await db.commit()
 
-                # 2. If NIN or BVN was provided by user, submit KYC identification to Paystack
+                # 3. CRITICAL: Update customer on Paystack with phone number!
+                # If a customer was originally created without a phone, POST /customer does not update it.
+                # Paystack Dedicated Account API strictly requires the customer record on Paystack to have a phone number.
+                if clean_phone:
+                    await client.put(
+                        f"{self.base_url}/customer/{cust_code}",
+                        json={
+                            "first_name": first_name,
+                            "last_name": last_name,
+                            "phone": clean_phone
+                        },
+                        headers=headers
+                    )
+
+                # 4. If NIN or BVN was provided by user, submit KYC identification to Paystack
                 if nin_or_bvn:
                     clean_val = nin_or_bvn.strip()
+                    id_type = "bvn" if len(clean_val) == 11 and clean_val.isdigit() else "nin"
                     ident_payload = {
                         "country": "NG",
-                        "type": "bvn" if len(clean_val) == 11 and clean_val.isdigit() else "nin",
+                        "type": id_type,
                         "value": clean_val,
                         "first_name": first_name,
                         "last_name": last_name
                     }
-                    if phone:
-                        ident_payload["phone"] = phone
+                    if clean_phone:
+                        ident_payload["phone"] = clean_phone
                     await client.post(
                         f"{self.base_url}/customer/{cust_code}/identification",
                         json=ident_payload,
                         headers=headers
                     )
 
-                # 3. Request Dedicated Virtual Account from Paystack (Wema Bank or Titan Paystack)
+                # 5. Request Dedicated Virtual Account from Paystack (Wema Bank or Titan Paystack)
                 dva_res = await client.post(
                     f"{self.base_url}/dedicated_account",
                     json={"customer": cust_code, "preferred_bank": "wema-bank"},
                     headers=headers
                 )
+
+                if dva_res.status_code not in (200, 201):
+                    # Fallback to titan-paystack if wema-bank is unavailable
+                    dva_res2 = await client.post(
+                        f"{self.base_url}/dedicated_account",
+                        json={"customer": cust_code, "preferred_bank": "titan-paystack"},
+                        headers=headers
+                    )
+                    if dva_res2.status_code in (200, 201):
+                        dva_res = dva_res2
+                    else:
+                        # Fallback to default bank assignment
+                        dva_res3 = await client.post(
+                            f"{self.base_url}/dedicated_account",
+                            json={"customer": cust_code},
+                            headers=headers
+                        )
+                        if dva_res3.status_code in (200, 201):
+                            dva_res = dva_res3
 
                 if dva_res.status_code in (200, 201):
                     dva_json = dva_res.json()

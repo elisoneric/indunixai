@@ -32,9 +32,10 @@ export const AuthPage: React.FC<AuthPageProps> = ({
   const [googleClientId, setGoogleClientId] = useState<string>(DEFAULT_GOOGLE_CLIENT_ID);
   const [error, setError] = useState<string | null>(null);
 
-  // Discover Google Client ID from backend or env
+  // Discover Google Client ID from backend or env and preload Google script
   useEffect(() => {
     let active = true;
+    ensureGoogleScript();
     api.getAuthConfig().then((cfg) => {
       if (!active) return;
       const cid = cfg.google_client_id || (import.meta as any).env.VITE_GOOGLE_CLIENT_ID || DEFAULT_GOOGLE_CLIENT_ID;
