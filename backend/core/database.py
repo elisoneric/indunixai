@@ -102,22 +102,28 @@ async def init_db():
         try:
             async with engine.begin() as conn:
                 await conn.run_sync(Base.metadata.create_all)
-                # Ensure new columns exist on existing tables
-                from sqlalchemy import text
-                for table, col, col_type in [
-                    ("wallets", "dedicated_account_bank", "VARCHAR(100)"),
-                    ("wallets", "dedicated_account_number", "VARCHAR(50)"),
-                    ("wallets", "dedicated_account_name", "VARCHAR(200)"),
-                    ("wallets", "paystack_customer_code", "VARCHAR(100)"),
-                    ("users", "username", "VARCHAR(100)"),
-                    ("users", "must_change_password", "BOOLEAN DEFAULT 0"),
-                    ("usage_logs", "api_key_name", "VARCHAR(100)"),
-                    ("usage_logs", "api_key_prefix", "VARCHAR(32)"),
-                ]:
-                    try:
-                        await conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {col_type}"))
-                    except Exception:
-                        pass
+                # Ensure new columns exist on existing tables safely
+                def _safe_migrate(sync_conn):
+                    from sqlalchemy import inspect, text
+                    inspector = inspect(sync_conn)
+                    columns_to_add = [
+                        ("wallets", "dedicated_account_bank", "VARCHAR(100)"),
+                        ("wallets", "dedicated_account_number", "VARCHAR(50)"),
+                        ("wallets", "dedicated_account_name", "VARCHAR(200)"),
+                        ("wallets", "paystack_customer_code", "VARCHAR(100)"),
+                        ("users", "username", "VARCHAR(100)"),
+                        ("users", "must_change_password", "BOOLEAN DEFAULT 0"),
+                    ]
+                    for table, col, col_type in columns_to_add:
+                        try:
+                            if inspector.has_table(table):
+                                existing_cols = [c["name"].lower() for c in inspector.get_columns(table)]
+                                if col.lower() not in existing_cols:
+                                    sync_conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {col_type}"))
+                        except Exception:
+                            pass
+
+                await conn.run_sync(_safe_migrate)
 
             # Seed default data and load system settings
             await _seed_admin_and_load_settings(AsyncSessionLocal)

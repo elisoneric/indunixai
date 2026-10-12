@@ -106,8 +106,6 @@ class TokenMeter:
         usage_log = UsageLog(
             user_id=user_id,
             api_key_id=api_key_id,
-            api_key_name=api_key.name if api_key else None,
-            api_key_prefix=api_key.key_prefix if api_key else None,
             model_requested=model,
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
