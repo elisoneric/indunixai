@@ -107,6 +107,9 @@ export interface UsageLogItem {
   latency_ms: number;
   is_stream: boolean;
   created_at: string;
+  api_key_id?: string | null;
+  api_key_name?: string | null;
+  api_key_prefix?: string | null;
 }
 
 export interface ModelDescriptor {
@@ -482,11 +485,11 @@ export const api = {
     return res.json();
   },
 
-  async getLogs(limit = 50, model?: string): Promise<UsageLogItem[]> {
-    const url = model
-      ? `${API_BASE}/api/analytics/logs?limit=${limit}&model=${encodeURIComponent(model)}`
-      : `${API_BASE}/api/analytics/logs?limit=${limit}`;
-    const res = await fetch(url, { headers: getAuthHeader() });
+  async getLogs(limit = 50, model?: string, apiKeyId?: string): Promise<UsageLogItem[]> {
+    const params = new URLSearchParams({ limit: limit.toString() });
+    if (model) params.set('model', model);
+    if (apiKeyId) params.set('api_key_id', apiKeyId);
+    const res = await fetch(`${API_BASE}/api/analytics/logs?${params.toString()}`, { headers: getAuthHeader() });
     if (!res.ok) throw new Error('Failed to load logs');
     return res.json();
   },

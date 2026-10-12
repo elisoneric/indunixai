@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
+from sqlalchemy.orm import selectinload
 from backend.core.database import get_db
 from backend.core.deps import get_current_user
 from backend.models.user import User
@@ -70,14 +71,41 @@ async def get_usage_summary(
 async def get_usage_logs(
     limit: int = Query(50, ge=1, le=200),
     model: Optional[str] = None,
+    api_key_id: Optional[str] = None,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    query = select(UsageLog).where(UsageLog.user_id == user.id)
+    query = (
+        select(UsageLog)
+        .options(selectinload(UsageLog.api_key))
+        .where(UsageLog.user_id == user.id)
+    )
     if model:
         query = query.where(UsageLog.model_requested == model)
+    if api_key_id:
+        query = query.where(UsageLog.api_key_id == api_key_id)
     query = query.order_by(UsageLog.created_at.desc()).limit(limit)
 
     result = await db.execute(query)
     logs = result.scalars().all()
-    return [UsageLogOut.model_validate(l) for l in logs]
+
+    output = []
+    for l in logs:
+        key_name = getattr(l, "api_key_name", None) or (l.api_key.name if l.api_key else None)
+        key_prefix = getattr(l, "api_key_prefix", None) or (l.api_key.key_prefix if l.api_key else None)
+        output.append(UsageLogOut(
+            id=l.id,
+            model_requested=l.model_requested,
+            prompt_tokens=l.prompt_tokens,
+            completion_tokens=l.completion_tokens,
+            total_tokens=l.total_tokens,
+            cost_deducted_ngn=float(l.cost_deducted_ngn),
+            latency_ms=l.latency_ms,
+            is_stream=l.is_stream,
+            created_at=l.created_at,
+            api_key_id=l.api_key_id,
+            api_key_name=key_name,
+            api_key_prefix=key_prefix,
+        ))
+
+    return output

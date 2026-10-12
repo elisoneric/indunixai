@@ -9,6 +9,8 @@ class UsageLog(Base):
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     api_key_id = Column(String(36), ForeignKey("api_keys.id", ondelete="SET NULL"), nullable=True, index=True)
+    api_key_name = Column(String(100), nullable=True)
+    api_key_prefix = Column(String(32), nullable=True)
     user_id = Column(String(36), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     model_requested = Column(String(64), nullable=False, index=True)
     prompt_tokens = Column(Integer, default=0, nullable=False)

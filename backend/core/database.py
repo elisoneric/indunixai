@@ -111,6 +111,8 @@ async def init_db():
                     ("wallets", "paystack_customer_code", "VARCHAR(100)"),
                     ("users", "username", "VARCHAR(100)"),
                     ("users", "must_change_password", "BOOLEAN DEFAULT 0"),
+                    ("usage_logs", "api_key_name", "VARCHAR(100)"),
+                    ("usage_logs", "api_key_prefix", "VARCHAR(32)"),
                 ]:
                     try:
                         await conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {col_type}"))

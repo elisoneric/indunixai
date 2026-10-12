@@ -142,11 +142,13 @@ async def run_e2e_test():
         assert len(logs) > 0, "No usage logs recorded"
         latest_log = logs[0]
         print(f"  [+] Log ID: {latest_log['id']}")
+        print(f"  [+] API Key Name: {latest_log.get('api_key_name')}")
         print(f"  [+] Model: {latest_log['model_requested']}")
         print(f"  [+] Total Tokens: {latest_log['total_tokens']}")
         print(f"  [+] Cost Deducted: NGN {latest_log['cost_deducted_ngn']:.6f}")
         print(f"  [+] Latency: {latest_log['latency_ms']}ms")
         print(f"  [+] Stream Mode: {latest_log['is_stream']}")
+        assert latest_log.get("api_key_name") == "E2E Production Key"
         assert latest_log["model_requested"] == "axion-1-core"
 
         # STEP 7: Test Preflight Balance Rejection (402)

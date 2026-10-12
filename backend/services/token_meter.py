@@ -93,6 +93,7 @@ class TokenMeter:
             wallet.balance_ngn = round(max(0.0, balance - remaining_to_deduct), 4)
 
         # If api_key_id is provided, update its spend and last_used_at
+        api_key = None
         if api_key_id:
             key_res = await db.execute(select(ApiKey).where(ApiKey.id == api_key_id))
             api_key = key_res.scalar_one_or_none()
@@ -105,6 +106,8 @@ class TokenMeter:
         usage_log = UsageLog(
             user_id=user_id,
             api_key_id=api_key_id,
+            api_key_name=api_key.name if api_key else None,
+            api_key_prefix=api_key.key_prefix if api_key else None,
             model_requested=model,
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,

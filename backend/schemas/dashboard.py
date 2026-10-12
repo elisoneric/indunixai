@@ -43,6 +43,9 @@ class UsageLogOut(BaseModel):
     latency_ms: int
     is_stream: bool
     created_at: datetime
+    api_key_id: Optional[str] = None
+    api_key_name: Optional[str] = None
+    api_key_prefix: Optional[str] = None
 
 class UsageSummaryOut(BaseModel):
     total_requests: int

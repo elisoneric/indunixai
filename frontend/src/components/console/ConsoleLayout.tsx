@@ -322,6 +322,7 @@ export const ConsoleLayout: React.FC<ConsoleLayoutProps> = ({
           {activeTab === 'logs' && (
             <UsageLogsView
               logs={logs}
+              keys={keys}
               onRefresh={onRefreshData}
               selectedFilter={logFilter}
               onFilterChange={setLogFilter}

@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
-import { Activity, RefreshCw, Filter, Clock, Zap, Coins } from 'lucide-react';
-import { UsageLogItem } from '../../api/client';
+import React from 'react';
+import { RefreshCw, Filter, Key } from 'lucide-react';
+import { UsageLogItem, ApiKeyItem } from '../../api/client';
 import { formatNaira, formatDate } from '../../utils/formatters';
 
 interface UsageLogsViewProps {
   logs: UsageLogItem[];
+  keys?: ApiKeyItem[];
   onRefresh: () => void;
   selectedFilter: string;
   onFilterChange: (model: string) => void;
@@ -16,6 +17,10 @@ export const UsageLogsView: React.FC<UsageLogsViewProps> = ({
   selectedFilter,
   onFilterChange,
 }) => {
+  const filteredLogs = logs.filter(
+    (log) => !selectedFilter || log.model_requested === selectedFilter
+  );
+
   return (
     <div className="space-y-6 animate-fadeIn">
       {/* Header & Controls */}
@@ -62,6 +67,7 @@ export const UsageLogsView: React.FC<UsageLogsViewProps> = ({
             <thead className="bg-slate-900/90 text-slate-400 border-b border-slate-800 uppercase tracking-wider text-[11px]">
               <tr>
                 <th className="py-3.5 px-6">Timestamp</th>
+                <th className="py-3.5 px-6">API Key</th>
                 <th className="py-3.5 px-6">Model Requested</th>
                 <th className="py-3.5 px-6">Prompt Tokens</th>
                 <th className="py-3.5 px-6">Completion</th>
@@ -72,17 +78,31 @@ export const UsageLogsView: React.FC<UsageLogsViewProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-850 text-slate-300">
-              {logs.length === 0 ? (
+              {filteredLogs.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-8 text-center text-slate-500">
+                  <td colSpan={9} className="py-8 text-center text-slate-500">
                     No requests recorded yet. Make a request via Python, cURL, or the Playground!
                   </td>
                 </tr>
               ) : (
-                logs.map((log) => (
+                filteredLogs.map((log) => (
                   <tr key={log.id} className="hover:bg-slate-900/50 transition-colors">
-                    <td className="py-3.5 px-6 text-slate-400">
+                    <td className="py-3.5 px-6 text-slate-400 whitespace-nowrap">
                       {formatDate(log.created_at)}
+                    </td>
+                    <td className="py-3.5 px-6 whitespace-nowrap">
+                      {log.api_key_name ? (
+                        <div className="flex items-center gap-1.5">
+                          <Key className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                          <span className="font-semibold text-white">
+                            {log.api_key_name}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-slate-800 text-slate-400 border border-slate-700/60">
+                          Playground / Session
+                        </span>
+                      )}
                     </td>
                     <td className="py-3.5 px-6">
                       <span className="font-bold text-white bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
