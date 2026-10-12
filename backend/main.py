@@ -24,6 +24,8 @@ async def lifespan(app: FastAPI):
     logger.info("Initializing Indunix Sovereign Infrastructure...")
     await init_db()
     await redis_manager.init()
+    from backend.services.key_pool import key_pool
+    key_pool.sync_from_settings(settings)
 
     # Load dynamic SMTP settings from database into email_service
     try:

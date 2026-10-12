@@ -32,14 +32,18 @@ export const AdminManagementView: React.FC = () => {
   const [paystackSecretKey, setPaystackSecretKey] = useState('');
   const [paystackPublicKey, setPaystackPublicKey] = useState('');
   const [deepseekApiKey, setDeepseekApiKey] = useState('');
+  const [deepseekSecondaryApiKey, setDeepseekSecondaryApiKey] = useState('');
   const [groqApiKey, setGroqApiKey] = useState('');
+  const [groqSecondaryApiKey, setGroqSecondaryApiKey] = useState('');
   const [togetherApiKey, setTogetherApiKey] = useState('');
   const [liveMode, setLiveMode] = useState(true);
 
   // Visibility toggles
   const [showSecret, setShowSecret] = useState(false);
   const [showDeepseek, setShowDeepseek] = useState(false);
+  const [showDeepseekSec, setShowDeepseekSec] = useState(false);
   const [showGroq, setShowGroq] = useState(false);
+  const [showGroqSec, setShowGroqSec] = useState(false);
   const [copiedWebhook, setCopiedWebhook] = useState(false);
 
   const loadData = async () => {
@@ -82,14 +86,18 @@ export const AdminManagementView: React.FC = () => {
       if (paystackSecretKey.trim()) updatePayload.paystack_secret_key = paystackSecretKey.trim();
       if (paystackPublicKey.trim()) updatePayload.paystack_public_key = paystackPublicKey.trim();
       if (deepseekApiKey.trim()) updatePayload.deepseek_api_key = deepseekApiKey.trim();
+      if (deepseekSecondaryApiKey.trim()) updatePayload.deepseek_secondary_api_key = deepseekSecondaryApiKey.trim();
       if (groqApiKey.trim()) updatePayload.groq_api_key = groqApiKey.trim();
+      if (groqSecondaryApiKey.trim()) updatePayload.groq_secondary_api_key = groqSecondaryApiKey.trim();
       if (togetherApiKey.trim()) updatePayload.together_api_key = togetherApiKey.trim();
 
       const res = await api.updateAdminConfig(updatePayload);
       setSuccessMsg(res.message || 'Admin configuration saved and applied successfully.');
       setPaystackSecretKey('');
       setDeepseekApiKey('');
+      setDeepseekSecondaryApiKey('');
       setGroqApiKey('');
+      setGroqSecondaryApiKey('');
       setTogetherApiKey('');
       await loadData();
     } catch (err: any) {
@@ -320,7 +328,7 @@ export const AdminManagementView: React.FC = () => {
             <div>
               <div className="flex items-center justify-between mb-2">
                 <label className="text-xs font-mono text-slate-300">
-                  DeepSeek API Key (Indunix 1 Core & Reason)
+                  Primary DeepSeek API Key (Core & Reason)
                 </label>
                 {config?.upstream?.deepseek_key_masked && (
                   <span className="text-[10px] font-mono text-slate-400">
@@ -333,7 +341,7 @@ export const AdminManagementView: React.FC = () => {
                   type={showDeepseek ? 'text' : 'password'}
                   value={deepseekApiKey}
                   onChange={(e) => setDeepseekApiKey(e.target.value)}
-                  placeholder="Enter DeepSeek API Key (sk-...)"
+                  placeholder="Enter Primary DeepSeek Key (sk-...)"
                   className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-600 focus:outline-none focus:border-cyan-500 font-mono pr-10"
                 />
                 <button
@@ -345,7 +353,43 @@ export const AdminManagementView: React.FC = () => {
                 </button>
               </div>
               <span className="text-[11px] text-slate-500 mt-1 block">
-                Routes Indunix 1 Core (V3) and Indunix 1 Reason (R1) requests.
+                Primary gateway connection for Indunix 1 Core and Reason.
+              </span>
+            </div>
+
+            {/* DeepSeek Secondary / Failover Key */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs font-mono text-slate-300 flex items-center gap-1.5">
+                  <span>Secondary DeepSeek Key</span>
+                  <span className="px-1.5 py-0.2 rounded text-[9px] bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 font-bold">
+                    Parallel / 429 Failover
+                  </span>
+                </label>
+                {config?.upstream?.deepseek_pool?.total_keys > 1 && (
+                  <span className="text-[10px] font-mono text-emerald-400">
+                    Pool Active ({config.upstream.deepseek_pool.total_keys} keys)
+                  </span>
+                )}
+              </div>
+              <div className="relative">
+                <input
+                  type={showDeepseekSec ? 'text' : 'password'}
+                  value={deepseekSecondaryApiKey}
+                  onChange={(e) => setDeepseekSecondaryApiKey(e.target.value)}
+                  placeholder="Enter Secondary Key (sk-... or comma-separated)"
+                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-600 focus:outline-none focus:border-cyan-500 font-mono pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowDeepseekSec(!showDeepseekSec)}
+                  className="absolute right-3 top-2.5 text-slate-500 hover:text-slate-300"
+                >
+                  {showDeepseekSec ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+              <span className="text-[11px] text-slate-500 mt-1 block">
+                Parallel round-robin load distribution & instant auto-failover on 429 limits.
               </span>
             </div>
 
@@ -353,7 +397,7 @@ export const AdminManagementView: React.FC = () => {
             <div>
               <div className="flex items-center justify-between mb-2">
                 <label className="text-xs font-mono text-slate-300">
-                  Groq API Key (Indunix 1 Spark)
+                  Primary Groq API Key (Spark)
                 </label>
                 {config?.upstream?.groq_key_masked && (
                   <span className="text-[10px] font-mono text-slate-400">
@@ -366,7 +410,7 @@ export const AdminManagementView: React.FC = () => {
                   type={showGroq ? 'text' : 'password'}
                   value={groqApiKey}
                   onChange={(e) => setGroqApiKey(e.target.value)}
-                  placeholder="Enter Groq API Key (gsk_...)"
+                  placeholder="Enter Primary Groq Key (gsk_...)"
                   className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500 font-mono pr-10"
                 />
                 <button
@@ -378,7 +422,43 @@ export const AdminManagementView: React.FC = () => {
                 </button>
               </div>
               <span className="text-[11px] text-slate-500 mt-1 block">
-                Routes Indunix 1 Spark sub-second token streaming.
+                Primary connection for Indunix 1 Spark token streaming.
+              </span>
+            </div>
+
+            {/* Groq Secondary / Failover Key */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className="text-xs font-mono text-slate-300 flex items-center gap-1.5">
+                  <span>Secondary Groq Key</span>
+                  <span className="px-1.5 py-0.2 rounded text-[9px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-bold">
+                    Parallel / 429 Failover
+                  </span>
+                </label>
+                {config?.upstream?.groq_pool?.total_keys > 1 && (
+                  <span className="text-[10px] font-mono text-emerald-400">
+                    Pool Active ({config.upstream.groq_pool.total_keys} keys)
+                  </span>
+                )}
+              </div>
+              <div className="relative">
+                <input
+                  type={showGroqSec ? 'text' : 'password'}
+                  value={groqSecondaryApiKey}
+                  onChange={(e) => setGroqSecondaryApiKey(e.target.value)}
+                  placeholder="Enter Secondary Key (gsk_... or comma-separated)"
+                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500 font-mono pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowGroqSec(!showGroqSec)}
+                  className="absolute right-3 top-2.5 text-slate-500 hover:text-slate-300"
+                >
+                  {showGroqSec ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+              <span className="text-[11px] text-slate-500 mt-1 block">
+                Parallel round-robin load distribution & instant auto-failover on 429 limits.
               </span>
             </div>
           </div>

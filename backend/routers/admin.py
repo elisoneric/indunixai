@@ -472,6 +472,8 @@ async def update_admin_promos(
     return AdminPromoCampaigns(**current_data)
 
 # =========================================================================
+from backend.services.key_pool import key_pool
+
 # 6. Gateway Keys & Upstream Integration Credentials
 # =========================================================================
 
@@ -479,7 +481,11 @@ class AdminConfigUpdate(BaseModel):
     paystack_secret_key: Optional[str] = None
     paystack_public_key: Optional[str] = None
     deepseek_api_key: Optional[str] = None
+    deepseek_secondary_api_key: Optional[str] = None
+    deepseek_api_keys: Optional[str] = None
     groq_api_key: Optional[str] = None
+    groq_secondary_api_key: Optional[str] = None
+    groq_api_keys: Optional[str] = None
     together_api_key: Optional[str] = None
     live_production_mode: Optional[bool] = None
 
@@ -506,8 +512,10 @@ async def get_admin_config(
         "upstream": {
             "deepseek_key_masked": mask_key(settings.DEEPSEEK_API_KEY),
             "has_deepseek_key": bool(settings.DEEPSEEK_API_KEY),
+            "deepseek_pool": key_pool.get_pool_status("deepseek"),
             "groq_key_masked": mask_key(settings.GROQ_API_KEY),
             "has_groq_key": bool(settings.GROQ_API_KEY),
+            "groq_pool": key_pool.get_pool_status("groq"),
             "together_key_masked": mask_key(settings.TOGETHER_API_KEY),
             "has_together_key": bool(settings.TOGETHER_API_KEY),
             "live_production_mode": is_live,
@@ -549,17 +557,42 @@ async def update_admin_config(
         os.environ["DEEPSEEK_API_KEY"] = val
         updated_fields.append("deepseek_api_key")
 
+    if payload.deepseek_secondary_api_key is not None and payload.deepseek_secondary_api_key.strip():
+        val = payload.deepseek_secondary_api_key.strip()
+        settings.DEEPSEEK_API_KEYS = val
+        os.environ["DEEPSEEK_API_KEYS"] = val
+        updated_fields.append("deepseek_secondary_api_key")
+    elif payload.deepseek_api_keys is not None and payload.deepseek_api_keys.strip():
+        val = payload.deepseek_api_keys.strip()
+        settings.DEEPSEEK_API_KEYS = val
+        os.environ["DEEPSEEK_API_KEYS"] = val
+        updated_fields.append("deepseek_api_keys")
+
     if payload.groq_api_key is not None and payload.groq_api_key.strip():
         val = payload.groq_api_key.strip()
         settings.GROQ_API_KEY = val
         os.environ["GROQ_API_KEY"] = val
         updated_fields.append("groq_api_key")
 
+    if payload.groq_secondary_api_key is not None and payload.groq_secondary_api_key.strip():
+        val = payload.groq_secondary_api_key.strip()
+        settings.GROQ_API_KEYS = val
+        os.environ["GROQ_API_KEYS"] = val
+        updated_fields.append("groq_secondary_api_key")
+    elif payload.groq_api_keys is not None and payload.groq_api_keys.strip():
+        val = payload.groq_api_keys.strip()
+        settings.GROQ_API_KEYS = val
+        os.environ["GROQ_API_KEYS"] = val
+        updated_fields.append("groq_api_keys")
+
     if payload.together_api_key is not None and payload.together_api_key.strip():
         val = payload.together_api_key.strip()
         settings.TOGETHER_API_KEY = val
         os.environ["TOGETHER_API_KEY"] = val
         updated_fields.append("together_api_key")
+
+    # Resync in-memory key pool with new credentials
+    key_pool.sync_from_settings(settings)
 
     if payload.live_production_mode is not None:
         settings.MOCK_UPSTREAM_IF_UNSET = not payload.live_production_mode

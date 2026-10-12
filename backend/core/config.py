@@ -32,9 +32,13 @@ class Settings(BaseSettings):
     
     # Internal Upstream AI Providers (COMPLETELY ABSTRACTED AND NEVER EXPOSED TO CLIENTS)
     DEEPSEEK_API_KEY: Optional[str] = Field(default=None, validation_alias="DEEPSEEK_API_KEY")
+    DEEPSEEK_API_KEYS: Optional[str] = Field(default=None, validation_alias="DEEPSEEK_API_KEYS")
     GROQ_API_KEY: Optional[str] = Field(default=None, validation_alias="GROQ_API_KEY")
+    GROQ_API_KEYS: Optional[str] = Field(default=None, validation_alias="GROQ_API_KEYS")
     OPENAI_API_KEY: Optional[str] = Field(default=None, validation_alias="OPENAI_API_KEY")
+    OPENAI_API_KEYS: Optional[str] = Field(default=None, validation_alias="OPENAI_API_KEYS")
     TOGETHER_API_KEY: Optional[str] = Field(default=None, validation_alias="TOGETHER_API_KEY")
+    TOGETHER_API_KEYS: Optional[str] = Field(default=None, validation_alias="TOGETHER_API_KEYS")
     MOCK_UPSTREAM_IF_UNSET: bool = Field(default=False, validation_alias="MOCK_UPSTREAM_IF_UNSET")
     
     # Enterprise On-premise Telemetry Master Signing Key

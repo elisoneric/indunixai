@@ -710,7 +710,11 @@ export const api = {
     paystack_secret_key?: string;
     paystack_public_key?: string;
     deepseek_api_key?: string;
+    deepseek_secondary_api_key?: string;
+    deepseek_api_keys?: string;
     groq_api_key?: string;
+    groq_secondary_api_key?: string;
+    groq_api_keys?: string;
     together_api_key?: string;
     live_production_mode?: boolean;
   }) {

@@ -7,6 +7,7 @@ import httpx
 from backend.core.config import settings
 from backend.core.exceptions import IndunixGatewayException, AxionGatewayException
 from backend.schemas.gateway import ChatCompletionRequest
+from backend.services.key_pool import key_pool
 
 class ProxyEngine:
     # Internal Routing Map (NEVER LEAKED TO CLIENTS)
@@ -75,6 +76,17 @@ class ProxyEngine:
             timeout=httpx.Timeout(connect=5.0, read=30.0, write=5.0, pool=5.0),
             limits=httpx.Limits(max_keepalive_connections=50, max_connections=200)
         )
+        key_pool.sync_from_settings(settings)
+
+    def _get_candidate_keys(self, route: Dict[str, Any]) -> List[str]:
+        """Returns candidate keys for the given model route from key pool or environment settings."""
+        provider = route.get("upstream_provider")
+        keys = key_pool.get_keys(provider) if provider else []
+        if not keys and route.get("api_key_env"):
+            env_key = getattr(settings, route["api_key_env"], None)
+            if env_key:
+                keys = [env_key]
+        return keys
 
     def _sanitize_response(self, text: str, public_model: str) -> str:
         """Strips any internal provider names from response text."""
@@ -154,12 +166,13 @@ class ProxyEngine:
         request: ChatCompletionRequest,
         model: str
     ) -> Dict[str, Any]:
-        """Executes non-streaming request with circuit breaker fallback."""
+        """Executes non-streaming request with parallel key pool rotation and 429 failover."""
         route = self.ROUTING_MAP.get(model, self.ROUTING_MAP["indunix-1-core"])
-        api_key = getattr(settings, route["api_key_env"], None) if route.get("api_key_env") else None
+        provider = route.get("upstream_provider", "deepseek")
+        candidate_keys = self._get_candidate_keys(route)
 
-        # If upstream key is not provided or mock mode is active, return synthetic response
-        if not api_key or settings.MOCK_UPSTREAM_IF_UNSET:
+        # If upstream keys are not provided or mock mode is active, return synthetic response
+        if not candidate_keys or settings.MOCK_UPSTREAM_IF_UNSET:
             await asyncio.sleep(0.08) # simulate network latency
             reply_text = self._generate_synthetic_reply(model, [m.model_dump() for m in request.messages])
             
@@ -190,48 +203,65 @@ class ProxyEngine:
                 "system_fingerprint": "fp_indunix_sovereign_1"
             }
 
-        # Otherwise forward to upstream provider with circuit breaker
+        # Otherwise forward to upstream provider with multi-key pool failover & circuit breaker
         upstream_payload = request.model_dump(exclude_none=True)
         upstream_payload["model"] = route["upstream_model"]
         upstream_payload["stream"] = False
 
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json"
-        }
-
-        try:
-            resp = await self.http_client.post(
-                route["upstream_url"],
-                json=upstream_payload,
-                headers=headers,
-                timeout=12.0
-            )
-            if resp.status_code >= 400:
-                raise Exception(f"Upstream returned {resp.status_code}")
-            data = resp.json()
-            # Rewrite model name to Indunix AI proprietary tier
-            data["model"] = model
-            if "choices" in data and len(data["choices"]) > 0:
-                content = data["choices"][0].get("message", {}).get("content", "")
-                if content:
-                    data["choices"][0]["message"]["content"] = self._sanitize_response(content, model)
-            return data
-        except Exception:
-            # Fallback circuit breaker
-            fallback_model = route.get("fallback_model", "indunix-1-core")
-            if fallback_model != model:
-                return await self.execute_non_streaming(request, fallback_model)
-            # Synthetic safe recovery
-            reply_text = self._generate_synthetic_reply(model, [m.model_dump() for m in request.messages])
-            return {
-                "id": f"chatcmpl-indunix-{uuid.uuid4().hex[:12]}",
-                "object": "chat.completion",
-                "created": int(time.time()),
-                "model": model,
-                "choices": [{"index": 0, "message": {"role": "assistant", "content": reply_text}, "finish_reason": "stop"}],
-                "usage": {"prompt_tokens": 15, "completion_tokens": len(reply_text)//4, "total_tokens": 15 + len(reply_text)//4}
+        max_attempts = max(1, len(candidate_keys))
+        for attempt in range(max_attempts):
+            api_key = key_pool.get_key(provider) or candidate_keys[0]
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json"
             }
+
+            try:
+                resp = await self.http_client.post(
+                    route["upstream_url"],
+                    json=upstream_payload,
+                    headers=headers,
+                    timeout=12.0
+                )
+                if resp.status_code == 429:
+                    cooldown = 60.0
+                    try:
+                        cooldown = float(resp.headers.get("retry-after", "60.0"))
+                    except Exception:
+                        pass
+                    key_pool.report_rate_limit(provider, api_key, cooldown_seconds=cooldown)
+                    if attempt < max_attempts - 1:
+                        continue # Rotate to next key in pool seamlessly
+                    raise Exception("Upstream rate limit (429) hit across all keys")
+
+                if resp.status_code >= 400:
+                    raise Exception(f"Upstream returned {resp.status_code}")
+
+                key_pool.report_success(provider, api_key)
+                data = resp.json()
+                data["model"] = model
+                if "choices" in data and len(data["choices"]) > 0:
+                    content = data["choices"][0].get("message", {}).get("content", "")
+                    if content:
+                        data["choices"][0]["message"]["content"] = self._sanitize_response(content, model)
+                return data
+            except Exception:
+                if attempt < max_attempts - 1:
+                    continue
+                # Fallback circuit breaker
+                fallback_model = route.get("fallback_model", "indunix-1-core")
+                if fallback_model != model:
+                    return await self.execute_non_streaming(request, fallback_model)
+                # Synthetic safe recovery
+                reply_text = self._generate_synthetic_reply(model, [m.model_dump() for m in request.messages])
+                return {
+                    "id": f"chatcmpl-indunix-{uuid.uuid4().hex[:12]}",
+                    "object": "chat.completion",
+                    "created": int(time.time()),
+                    "model": model,
+                    "choices": [{"index": 0, "message": {"role": "assistant", "content": reply_text}, "finish_reason": "stop"}],
+                    "usage": {"prompt_tokens": 15, "completion_tokens": len(reply_text) // 4, "total_tokens": 15 + len(reply_text) // 4}
+                }
 
     async def execute_streaming(
         self,
@@ -239,17 +269,18 @@ class ProxyEngine:
         model: str
     ) -> AsyncGenerator[str, None]:
         """
-        Executes streaming SSE response with sub-15ms overhead and proprietary sanitization.
+        Executes streaming SSE response with sub-15ms overhead, parallel key rotation, and 429 failover.
         Yields standard SSE lines: data: { ... }\n\n
         """
         route = self.ROUTING_MAP.get(model, self.ROUTING_MAP["indunix-1-core"])
-        api_key = getattr(settings, route["api_key_env"], None) if route.get("api_key_env") else None
+        provider = route.get("upstream_provider", "deepseek")
+        candidate_keys = self._get_candidate_keys(route)
 
         req_id = f"chatcmpl-indunix-{uuid.uuid4().hex[:12]}"
         created_ts = int(time.time())
 
         # If mock/unset, stream synthetic tokens with true sub-15ms chunk cadence
-        if not api_key or settings.MOCK_UPSTREAM_IF_UNSET:
+        if not candidate_keys or settings.MOCK_UPSTREAM_IF_UNSET:
             full_reply = self._generate_synthetic_reply(model, [m.model_dump() for m in request.messages])
             
             # Initial chunk with role
@@ -282,7 +313,6 @@ class ProxyEngine:
                     }]
                 }
                 yield f"data: {json.dumps(chunk)}\n\n"
-                # Ultra fast stream for spark, measured cadence for reason/core
                 delay = 0.012 if model in ("indunix-1-spark", "axion-1-spark") else 0.025
                 await asyncio.sleep(delay)
 
@@ -302,61 +332,84 @@ class ProxyEngine:
             yield "data: [DONE]\n\n"
             return
 
-        # Upstream real streaming with passthrough and chunk sanitization
+        # Upstream real streaming with passthrough, parallel key rotation, and 429 failover
         upstream_payload = request.model_dump(exclude_none=True)
         upstream_payload["model"] = route["upstream_model"]
         upstream_payload["stream"] = True
 
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json"
-        }
+        max_attempts = max(1, len(candidate_keys))
+        stream_started = False
 
-        try:
-            async with self.http_client.stream(
-                "POST",
-                route["upstream_url"],
-                json=upstream_payload,
-                headers=headers,
-                timeout=20.0
-            ) as resp:
-                if resp.status_code >= 400:
-                    raise Exception(f"Upstream stream failed: {resp.status_code}")
-                
-                async for line in resp.aiter_lines():
-                    if not line:
-                        continue
-                    if line.startswith("data: "):
-                        raw_data = line[6:].strip()
-                        if raw_data == "[DONE]":
-                            yield "data: [DONE]\n\n"
-                            break
-                        try:
-                            chunk_obj = json.loads(raw_data)
-                            chunk_obj["model"] = model
-                            # Sanitize content
-                            if "choices" in chunk_obj and chunk_obj["choices"]:
-                                delta = chunk_obj["choices"][0].get("delta", {})
-                                if "content" in delta and delta["content"]:
-                                    delta["content"] = self._sanitize_response(delta["content"], model)
-                            yield f"data: {json.dumps(chunk_obj)}\n\n"
-                        except Exception:
-                            yield f"{line}\n\n"
-        except Exception:
-            # Fallback streaming if connection drops
-            fallback_reply = self._generate_synthetic_reply(model, [m.model_dump() for m in request.messages])
-            fallback_chunk = {
-                "id": req_id,
-                "object": "chat.completion.chunk",
-                "created": created_ts,
-                "model": model,
-                "choices": [{
-                    "index": 0,
-                    "delta": {"content": fallback_reply},
-                    "finish_reason": "stop"
-                }]
+        for attempt in range(max_attempts):
+            api_key = key_pool.get_key(provider) or candidate_keys[0]
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json"
             }
-            yield f"data: {json.dumps(fallback_chunk)}\n\n"
-            yield "data: [DONE]\n\n"
+
+            try:
+                async with self.http_client.stream(
+                    "POST",
+                    route["upstream_url"],
+                    json=upstream_payload,
+                    headers=headers,
+                    timeout=20.0
+                ) as resp:
+                    if resp.status_code == 429:
+                        cooldown = 60.0
+                        try:
+                            cooldown = float(resp.headers.get("retry-after", "60.0"))
+                        except Exception:
+                            pass
+                        key_pool.report_rate_limit(provider, api_key, cooldown_seconds=cooldown)
+                        if attempt < max_attempts - 1:
+                            continue # Seamless retry with next key in pool
+                        raise Exception("Upstream stream 429 rate limit hit on all keys")
+
+                    if resp.status_code >= 400:
+                        raise Exception(f"Upstream stream failed: {resp.status_code}")
+
+                    key_pool.report_success(provider, api_key)
+                    stream_started = True
+
+                    async for line in resp.aiter_lines():
+                        if not line:
+                            continue
+                        if line.startswith("data: "):
+                            raw_data = line[6:].strip()
+                            if raw_data == "[DONE]":
+                                yield "data: [DONE]\n\n"
+                                break
+                            try:
+                                chunk_obj = json.loads(raw_data)
+                                chunk_obj["model"] = model
+                                if "choices" in chunk_obj and chunk_obj["choices"]:
+                                    delta = chunk_obj["choices"][0].get("delta", {})
+                                    if "content" in delta and delta["content"]:
+                                        delta["content"] = self._sanitize_response(delta["content"], model)
+                                yield f"data: {json.dumps(chunk_obj)}\n\n"
+                            except Exception:
+                                yield f"{line}\n\n"
+                    return
+            except Exception:
+                if not stream_started and attempt < max_attempts - 1:
+                    continue
+                break
+
+        # Fallback streaming if connection drops
+        fallback_reply = self._generate_synthetic_reply(model, [m.model_dump() for m in request.messages])
+        fallback_chunk = {
+            "id": req_id,
+            "object": "chat.completion.chunk",
+            "created": created_ts,
+            "model": model,
+            "choices": [{
+                "index": 0,
+                "delta": {"content": fallback_reply},
+                "finish_reason": "stop"
+            }]
+        }
+        yield f"data: {json.dumps(fallback_chunk)}\n\n"
+        yield "data: [DONE]\n\n"
 
 proxy_engine = ProxyEngine()
