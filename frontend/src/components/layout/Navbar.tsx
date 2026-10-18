@@ -26,13 +26,13 @@ export const Navbar: React.FC<NavbarProps> = ({
 }) => {
   return (
     <header className="fixed inset-x-0 top-0 z-50 glass-header duration-200">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
+      <div className="max-w-7xl mx-auto px-2.5 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between gap-1.5 sm:gap-4">
         {/* Brand Logo - Grok/x.ai Sleek Style */}
         <div 
           onClick={() => onNavigate('landing')}
-          className="flex items-center gap-3 cursor-pointer group shrink-0 select-none"
+          className="flex items-center gap-2 sm:gap-3 cursor-pointer group shrink-0 select-none"
         >
-          <IndunixLogo size={32} showText textSize="text-lg" />
+          <IndunixLogo size={28} showText textSize="text-sm sm:text-base md:text-lg" />
         </div>
 
         {/* Center Nav Links - Grok/x.ai Single-row Clean Typography */}
@@ -127,25 +127,25 @@ export const Navbar: React.FC<NavbarProps> = ({
         </nav>
 
         {/* Right CTA Actions - Grok-Style Pill Buttons */}
-        <div className="flex items-center gap-2.5 shrink-0">
+        <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
           {/* Chat Free Pill Button */}
           <button
             onClick={() => onNavigate('chat')}
-            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
+            className={`inline-flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full text-xs font-semibold transition-all shrink-0 ${
               currentPage === 'chat'
                 ? 'bg-emerald-500 text-black shadow-[0_0_15px_rgba(16,185,129,0.3)]'
                 : 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 hover:border-emerald-400/50'
             }`}
             title="Chat with Indunix AI Free"
           >
-            <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Chat Free</span>
+            <Sparkles className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+            <span>Chat<span className="hidden xs:inline"> Free</span></span>
           </button>
 
           {/* Help Desk soft pill */}
           <button
             onClick={onOpenHelp}
-            className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium text-zinc-300 hover:text-white bg-white/[0.03] hover:bg-white/[0.07] border border-white/[0.08] transition-all"
+            className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium text-zinc-300 hover:text-white bg-white/[0.03] hover:bg-white/[0.07] border border-white/[0.08] transition-all shrink-0"
           >
             <HelpCircle className="w-3.5 h-3.5 text-zinc-400" />
             <span>Help Desk</span>
@@ -156,11 +156,11 @@ export const Navbar: React.FC<NavbarProps> = ({
               {/* Wallet Pill */}
               <div 
                 onClick={onOpenDeposit}
-                className="flex items-center gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full bg-white/[0.04] border border-emerald-500/30 hover:border-emerald-400 cursor-pointer transition-all"
+                className="flex items-center gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full bg-white/[0.04] border border-emerald-500/30 hover:border-emerald-400 cursor-pointer transition-all shrink-0"
                 title="Deposit Naira credits"
               >
                 <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
-                <span className="text-[11px] sm:text-xs font-mono font-medium text-emerald-300">
+                <span className="text-[11px] sm:text-xs font-mono font-medium text-emerald-300 whitespace-nowrap">
                   {wallet ? formatNaira(wallet.total_available_ngn) : '₦1,000.00'}
                 </span>
                 <span className="hidden sm:inline text-[10px] font-mono text-zinc-400 hover:text-white ml-0.5">
@@ -171,7 +171,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               {/* Console Button */}
               <button
                 onClick={() => onNavigate('console')}
-                className={`btn-pill-primary flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-4 py-1 sm:py-1.5 text-xs ${
+                className={`btn-pill-primary flex items-center gap-1 sm:gap-1.5 !px-2.5 sm:!px-4 !py-1 sm:!py-1.5 text-xs shrink-0 whitespace-nowrap ${
                   currentPage === 'console' ? 'ring-2 ring-emerald-400' : ''
                 }`}
               >
@@ -180,20 +180,20 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
             </div>
           ) : (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 sm:gap-2 shrink-0">
               <button
                 onClick={() => onOpenAuth('login')}
-                className="px-3 py-1.5 text-xs font-medium text-zinc-400 hover:text-white transition-colors"
+                className="px-1.5 sm:px-3 py-1 sm:py-1.5 text-xs font-medium text-zinc-400 hover:text-white transition-colors shrink-0 whitespace-nowrap"
               >
                 Sign In
               </button>
               
               <button
                 onClick={() => onOpenAuth('register')}
-                className="btn-pill-primary flex items-center gap-1.5 shadow-[0_0_20px_rgba(255,255,255,0.18)]"
+                className="btn-pill-primary !px-2.5 sm:!px-4 !py-1 sm:!py-1.5 text-xs flex items-center gap-1 sm:gap-1.5 shadow-[0_0_20px_rgba(255,255,255,0.18)] shrink-0 whitespace-nowrap"
               >
-                <span>Get API Key</span>
-                <ArrowRight className="w-3.5 h-3.5" />
+                <span>Get API<span className="hidden xs:inline"> Key</span></span>
+                <ArrowRight className="w-3.5 h-3.5 hidden xs:inline" />
               </button>
             </div>
           )}
