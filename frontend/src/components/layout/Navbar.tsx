@@ -1,5 +1,5 @@
 import React from 'react';
-import { Terminal, Zap, BookOpen, HelpCircle, ArrowRight, Sparkles } from 'lucide-react';
+import { Terminal } from 'lucide-react';
 import { formatNaira } from '../../utils/formatters';
 import { IndunixLogo } from '../common/IndunixLogo';
 
@@ -46,15 +46,14 @@ export const Navbar: React.FC<NavbarProps> = ({
             Overview
           </button>
 
-          {/* Chat Free Nav Link */}
+          {/* Chat Nav Link */}
           <button
             onClick={() => onNavigate('chat')}
-            className={`px-3 py-1.5 rounded-full transition-colors flex items-center gap-1.5 ${
+            className={`px-3 py-1.5 rounded-full transition-colors ${
               currentPage === 'chat' ? 'text-white bg-emerald-500/20 font-semibold border border-emerald-500/30' : 'hover:text-emerald-300'
             }`}
           >
-            <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Chat</span>
+            Chat
           </button>
           
           <a
@@ -80,10 +79,9 @@ export const Navbar: React.FC<NavbarProps> = ({
                 setTimeout(() => document.getElementById('playground')?.scrollIntoView({ behavior: 'smooth' }), 100);
               }
             }}
-            className="px-3 py-1.5 rounded-full hover:text-white transition-colors flex items-center gap-1"
+            className="px-3 py-1.5 rounded-full hover:text-white transition-colors"
           >
-            <Zap className="w-3 h-3 text-emerald-400" />
-            <span>Playground</span>
+            Playground
           </a>
 
           <a
@@ -117,40 +115,16 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Dedicated Docs Page Link */}
           <button
             onClick={() => onNavigate('docs')}
-            className={`px-3 py-1.5 rounded-full transition-colors flex items-center gap-1.5 ${
+            className={`px-3 py-1.5 rounded-full transition-colors ${
               currentPage === 'docs' ? 'text-white bg-white/[0.08] font-semibold border border-white/[0.12]' : 'hover:text-white'
             }`}
           >
-            <BookOpen className="w-3.5 h-3.5 text-zinc-400" />
-            <span>Docs</span>
+            Docs
           </button>
         </nav>
 
-        {/* Right CTA Actions - Grok-Style Pill Buttons */}
-        <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
-          {/* Chat Free Pill Button */}
-          <button
-            onClick={() => onNavigate('chat')}
-            className={`inline-flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1 sm:py-1.5 rounded-full text-xs font-semibold transition-all shrink-0 ${
-              currentPage === 'chat'
-                ? 'bg-emerald-500 text-black shadow-[0_0_15px_rgba(16,185,129,0.3)]'
-                : 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 hover:border-emerald-400/50'
-            }`}
-            title="Chat with Indunix AI Free"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-            <span>Chat<span className="hidden xs:inline"> Free</span></span>
-          </button>
-
-          {/* Help Desk soft pill */}
-          <button
-            onClick={onOpenHelp}
-            className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium text-zinc-300 hover:text-white bg-white/[0.03] hover:bg-white/[0.07] border border-white/[0.08] transition-all shrink-0"
-          >
-            <HelpCircle className="w-3.5 h-3.5 text-zinc-400" />
-            <span>Help Desk</span>
-          </button>
-
+        {/* Right Actions - Single CTA Button & No Emoji */}
+        <div className="flex items-center gap-2 sm:gap-3 shrink-0">
           {user ? (
             <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
               {/* Wallet Pill */}
@@ -171,7 +145,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               {/* Console Button */}
               <button
                 onClick={() => onNavigate('console')}
-                className={`btn-pill-primary flex items-center gap-1 sm:gap-1.5 !px-2.5 sm:!px-4 !py-1 sm:!py-1.5 text-xs shrink-0 whitespace-nowrap ${
+                className={`btn-pill-primary flex items-center gap-1 sm:gap-1.5 !px-3 sm:!px-4 !py-1 sm:!py-1.5 text-xs shrink-0 whitespace-nowrap ${
                   currentPage === 'console' ? 'ring-2 ring-emerald-400' : ''
                 }`}
               >
@@ -180,20 +154,21 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
             </div>
           ) : (
-            <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+            <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+              {/* Subtle Sign In Link */}
               <button
                 onClick={() => onOpenAuth('login')}
-                className="px-1.5 sm:px-3 py-1 sm:py-1.5 text-xs font-medium text-zinc-400 hover:text-white transition-colors shrink-0 whitespace-nowrap"
+                className="px-1.5 sm:px-2 py-1 text-xs font-medium text-zinc-400 hover:text-white transition-colors shrink-0 whitespace-nowrap"
               >
                 Sign In
               </button>
               
+              {/* Exactly ONE Single CTA Button - No Emoji */}
               <button
-                onClick={() => onOpenAuth('register')}
-                className="btn-pill-primary !px-2.5 sm:!px-4 !py-1 sm:!py-1.5 text-xs flex items-center gap-1 sm:gap-1.5 shadow-[0_0_20px_rgba(255,255,255,0.18)] shrink-0 whitespace-nowrap"
+                onClick={() => (currentPage === 'chat' ? onOpenAuth('register') : onNavigate('chat'))}
+                className="px-3.5 sm:px-4 py-1.5 rounded-full text-xs font-semibold bg-emerald-500 hover:bg-emerald-400 text-black transition-all shadow-[0_0_15px_rgba(16,185,129,0.25)] hover:shadow-[0_0_20px_rgba(16,185,129,0.4)] shrink-0 whitespace-nowrap"
               >
-                <span>Get API<span className="hidden xs:inline"> Key</span></span>
-                <ArrowRight className="w-3.5 h-3.5 hidden xs:inline" />
+                {currentPage === 'chat' ? 'Get API Key' : 'Chat Free'}
               </button>
             </div>
           )}
