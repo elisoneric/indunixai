@@ -69,21 +69,62 @@ async def get_usage_summary(
 
 @router.get("/logs", response_model=List[UsageLogOut])
 async def get_usage_logs(
-    limit: int = Query(50, ge=1, le=200),
+    limit: int = Query(100, ge=1, le=1000),
     model: Optional[str] = None,
     api_key_id: Optional[str] = None,
+    time_range: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
+    """
+    Retrieves detailed usage & telemetry logs with model, API key, and time-range filtering.
+    """
     query = (
         select(UsageLog)
         .options(selectinload(UsageLog.api_key))
         .where(UsageLog.user_id == user.id)
     )
-    if model:
-        query = query.where(UsageLog.model_requested == model)
-    if api_key_id:
-        query = query.where(UsageLog.api_key_id == api_key_id)
+
+    if model and model.strip():
+        query = query.where(UsageLog.model_requested == model.strip())
+
+    if api_key_id and api_key_id.strip():
+        val = api_key_id.strip().lower()
+        if val in ("none", "session", "playground"):
+            query = query.where(UsageLog.api_key_id.is_(None))
+        else:
+            query = query.where(UsageLog.api_key_id == api_key_id.strip())
+
+    # Time filtering
+    now = datetime.now(timezone.utc)
+    if time_range:
+        tr = time_range.strip().lower()
+        if tr in ("24h", "today", "1d"):
+            cutoff = (now - timedelta(hours=24)).replace(tzinfo=None)
+            query = query.where(UsageLog.created_at >= cutoff)
+        elif tr in ("7d", "week"):
+            cutoff = (now - timedelta(days=7)).replace(tzinfo=None)
+            query = query.where(UsageLog.created_at >= cutoff)
+        elif tr in ("30d", "month"):
+            cutoff = (now - timedelta(days=30)).replace(tzinfo=None)
+            query = query.where(UsageLog.created_at >= cutoff)
+
+    if start_date:
+        try:
+            sd = datetime.fromisoformat(start_date.replace("Z", "+00:00")).replace(tzinfo=None)
+            query = query.where(UsageLog.created_at >= sd)
+        except Exception:
+            pass
+
+    if end_date:
+        try:
+            ed = datetime.fromisoformat(end_date.replace("Z", "+00:00")).replace(tzinfo=None)
+            query = query.where(UsageLog.created_at <= ed)
+        except Exception:
+            pass
+
     query = query.order_by(UsageLog.created_at.desc()).limit(limit)
 
     result = await db.execute(query)
@@ -109,3 +150,76 @@ async def get_usage_logs(
         ))
 
     return output
+
+
+@router.get("/logs/grouped")
+async def get_grouped_usage_logs(
+    group_by: str = Query("api_key", pattern="^(api_key|model|date)$"),
+    time_range: Optional[str] = None,
+    model: Optional[str] = None,
+    api_key_id: Optional[str] = None,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Groups and aggregates usage logs by API Key, Model, or Date with metric summaries.
+    """
+    logs = await get_usage_logs(
+        limit=1000,
+        model=model,
+        api_key_id=api_key_id,
+        time_range=time_range,
+        user=user,
+        db=db
+    )
+
+    groups = {}
+    for l in logs:
+        if group_by == "api_key":
+            group_key = l.api_key_id or "session"
+            group_name = l.api_key_name or ("Browser Session / Playground" if not l.api_key_id else "Unknown Key")
+            extra = {"api_key_prefix": l.api_key_prefix}
+        elif group_by == "model":
+            group_key = l.model_requested
+            group_name = l.model_requested
+            extra = {}
+        else: # date
+            d_str = l.created_at.strftime("%Y-%m-%d") if isinstance(l.created_at, datetime) else str(l.created_at)[:10]
+            group_key = d_str
+            group_name = d_str
+            extra = {}
+
+        if group_key not in groups:
+            groups[group_key] = {
+                "group_key": group_key,
+                "group_name": group_name,
+                "total_requests": 0,
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "total_tokens": 0,
+                "total_cost_ngn": 0.0,
+                "latencies": [],
+                "logs": [],
+                **extra
+            }
+
+        g = groups[group_key]
+        g["total_requests"] += 1
+        g["prompt_tokens"] += l.prompt_tokens
+        g["completion_tokens"] += l.completion_tokens
+        g["total_tokens"] += l.total_tokens
+        g["total_cost_ngn"] = round(g["total_cost_ngn"] + l.cost_deducted_ngn, 4)
+        g["latencies"].append(l.latency_ms)
+        g["logs"].append(l)
+
+    # Compute averages
+    result = []
+    for g in groups.values():
+        avg_lat = round(sum(g["latencies"]) / len(g["latencies"]), 1) if g["latencies"] else 0.0
+        del g["latencies"]
+        g["avg_latency_ms"] = avg_lat
+        result.append(g)
+
+    # Sort descending by total_requests or cost
+    result.sort(key=lambda x: x["total_requests"], reverse=True)
+    return result

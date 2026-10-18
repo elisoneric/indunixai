@@ -112,6 +112,19 @@ export interface UsageLogItem {
   api_key_prefix?: string | null;
 }
 
+export interface GroupedUsageLogItem {
+  group_key: string;
+  group_name: string;
+  api_key_prefix?: string;
+  total_requests: number;
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  total_cost_ngn: number;
+  avg_latency_ms: number;
+  logs: UsageLogItem[];
+}
+
 export interface ModelDescriptor {
   id: string;
   root: string;
@@ -544,12 +557,49 @@ export const api = {
     return res.json();
   },
 
-  async getLogs(limit = 50, model?: string, apiKeyId?: string): Promise<UsageLogItem[]> {
-    const params = new URLSearchParams({ limit: limit.toString() });
-    if (model) params.set('model', model);
-    if (apiKeyId) params.set('api_key_id', apiKeyId);
-    const res = await fetch(`${API_BASE}/api/analytics/logs?${params.toString()}`, { headers: getAuthHeader() });
+  async getLogs(
+    params?: number | {
+      limit?: number;
+      model?: string;
+      apiKeyId?: string;
+      timeRange?: string;
+      startDate?: string;
+      endDate?: string;
+    },
+    modelArg?: string,
+    apiKeyIdArg?: string
+  ): Promise<UsageLogItem[]> {
+    const searchParams = new URLSearchParams();
+    if (typeof params === 'object' && params !== null) {
+      if (params.limit) searchParams.set('limit', params.limit.toString());
+      if (params.model) searchParams.set('model', params.model);
+      if (params.apiKeyId) searchParams.set('api_key_id', params.apiKeyId);
+      if (params.timeRange) searchParams.set('time_range', params.timeRange);
+      if (params.startDate) searchParams.set('start_date', params.startDate);
+      if (params.endDate) searchParams.set('end_date', params.endDate);
+    } else {
+      const limit = typeof params === 'number' ? params : 50;
+      searchParams.set('limit', limit.toString());
+      if (modelArg) searchParams.set('model', modelArg);
+      if (apiKeyIdArg) searchParams.set('api_key_id', apiKeyIdArg);
+    }
+    const res = await fetch(`${API_BASE}/api/analytics/logs?${searchParams.toString()}`, { headers: getAuthHeader() });
     if (!res.ok) throw new Error('Failed to load logs');
+    return res.json();
+  },
+
+  async getGroupedLogs(params: {
+    groupBy: 'api_key' | 'model' | 'date';
+    timeRange?: string;
+    model?: string;
+    apiKeyId?: string;
+  }): Promise<GroupedUsageLogItem[]> {
+    const searchParams = new URLSearchParams({ group_by: params.groupBy });
+    if (params.timeRange) searchParams.set('time_range', params.timeRange);
+    if (params.model) searchParams.set('model', params.model);
+    if (params.apiKeyId) searchParams.set('api_key_id', params.apiKeyId);
+    const res = await fetch(`${API_BASE}/api/analytics/logs/grouped?${searchParams.toString()}`, { headers: getAuthHeader() });
+    if (!res.ok) throw new Error('Failed to load grouped logs');
     return res.json();
   },
 
