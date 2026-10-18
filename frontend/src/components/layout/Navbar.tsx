@@ -1,5 +1,5 @@
 import React from 'react';
-import { Terminal, Zap, BookOpen, HelpCircle, ArrowRight } from 'lucide-react';
+import { Terminal, Zap, BookOpen, HelpCircle, ArrowRight, Sparkles } from 'lucide-react';
 import { formatNaira } from '../../utils/formatters';
 import { IndunixLogo } from '../common/IndunixLogo';
 
@@ -44,6 +44,17 @@ export const Navbar: React.FC<NavbarProps> = ({
             }`}
           >
             Overview
+          </button>
+
+          {/* Chat Free Nav Link */}
+          <button
+            onClick={() => onNavigate('chat')}
+            className={`px-3 py-1.5 rounded-full transition-colors flex items-center gap-1.5 ${
+              currentPage === 'chat' ? 'text-white bg-emerald-500/20 font-semibold border border-emerald-500/30' : 'hover:text-emerald-300'
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Chat</span>
           </button>
           
           <a
@@ -117,6 +128,20 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Right CTA Actions - Grok-Style Pill Buttons */}
         <div className="flex items-center gap-2.5 shrink-0">
+          {/* Chat Free Pill Button */}
+          <button
+            onClick={() => onNavigate('chat')}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${
+              currentPage === 'chat'
+                ? 'bg-emerald-500 text-black shadow-[0_0_15px_rgba(16,185,129,0.3)]'
+                : 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 hover:border-emerald-400/50'
+            }`}
+            title="Chat with Indunix AI Free"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+            <span>Chat Free</span>
+          </button>
+
           {/* Help Desk soft pill */}
           <button
             onClick={onOpenHelp}

@@ -13,7 +13,8 @@ from backend.routers import (
     analytics,
     enterprise,
     telemetry,
-    admin
+    admin,
+    chat
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -67,6 +68,7 @@ app.include_router(analytics.router)
 app.include_router(enterprise.router)
 app.include_router(telemetry.router)
 app.include_router(admin.router)
+app.include_router(chat.router)
 
 @app.get("/favicon.ico", include_in_schema=False)
 async def favicon():

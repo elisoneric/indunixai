@@ -5,9 +5,10 @@ interface HeroProps {
   onStartFree: () => void;
   onExploreEnterprise: () => void;
   onReadDocs?: () => void;
+  onOpenChat?: () => void;
 }
 
-export const Hero: React.FC<HeroProps> = ({ onStartFree, onExploreEnterprise, onReadDocs }) => {
+export const Hero: React.FC<HeroProps> = ({ onStartFree, onExploreEnterprise, onReadDocs, onOpenChat }) => {
   const [activeTab, setActiveTab] = useState<'python' | 'node' | 'curl'>('python');
   const [copied, setCopied] = useState(false);
 
@@ -86,26 +87,35 @@ console.log(completion.choices[0].message.content);`,
 
           {/* CTA Group - Grok Style Pill Buttons */}
           <div className="flex flex-wrap items-center justify-center gap-3.5 mb-10">
+            {/* Prominent Chat Free CTA */}
+            <button
+              onClick={onOpenChat}
+              className="btn-pill-primary !px-7 !py-3 text-sm flex items-center gap-2 bg-gradient-to-r from-emerald-400 via-teal-400 to-emerald-500 text-black font-extrabold shadow-[0_0_30px_rgba(16,185,129,0.35)] hover:scale-[1.02] transition-transform"
+            >
+              <Sparkles className="w-4 h-4 fill-black text-black" />
+              <span>Chat Free Now</span>
+            </button>
+
             <button
               onClick={onStartFree}
-              className="btn-pill-primary !px-7 !py-3 text-sm flex items-center gap-2 shadow-[0_0_25px_rgba(255,255,255,0.2)]"
+              className="btn-pill-secondary !px-6 !py-3 text-sm flex items-center gap-2"
             >
-              <span>Get Your API Key (₦1,000.00 Free)</span>
+              <span>Get API Key (₦1,000 Free)</span>
               <ArrowRight className="w-4 h-4" />
             </button>
             <button
               onClick={onReadDocs || onExploreEnterprise}
-              className="btn-pill-secondary !px-6 !py-3 text-sm flex items-center gap-2"
+              className="btn-pill-secondary !px-5 !py-3 text-sm flex items-center gap-2"
             >
               <BookOpen className="w-4 h-4 text-zinc-400" />
-              <span>Read the Docs</span>
+              <span>Read Docs</span>
             </button>
             <button
               onClick={onExploreEnterprise}
               className="btn-pill-secondary !px-5 !py-3 text-sm flex items-center gap-2"
             >
               <Shield className="w-4 h-4 text-emerald-400" />
-              <span>On-Premise Leases</span>
+              <span>On-Premise</span>
             </button>
           </div>
 

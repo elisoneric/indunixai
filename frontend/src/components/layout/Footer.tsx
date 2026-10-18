@@ -1,5 +1,5 @@
 import React from 'react';
-import { Cpu, ExternalLink, Headphones, ShieldCheck, Terminal, BookOpen, CreditCard, Lock, Server, FileText } from 'lucide-react';
+import { Cpu, ExternalLink, Headphones, ShieldCheck, Terminal, BookOpen, CreditCard, Lock, Server, FileText, Sparkles } from 'lucide-react';
 import { IndunixLogo } from '../common/IndunixLogo';
 
 interface FooterProps {
@@ -9,6 +9,7 @@ interface FooterProps {
   onNavigateDocs?: () => void;
   onNavigatePrivacy?: () => void;
   onNavigateTerms?: () => void;
+  onNavigateChat?: () => void;
   onOpenLegal?: (tab: 'privacy' | 'terms') => void;
 }
 
@@ -19,6 +20,7 @@ export const Footer: React.FC<FooterProps> = ({
   onNavigateDocs,
   onNavigatePrivacy,
   onNavigateTerms,
+  onNavigateChat,
   onOpenLegal,
 }) => {
   const scrollTo = (id: string) => {
@@ -105,6 +107,18 @@ export const Footer: React.FC<FooterProps> = ({
                 >
                   <span>Indunix Edge (Local)</span>
                   <span className="text-zinc-500 font-mono">On-Prem Lease</span>
+                </button>
+              </li>
+              <li>
+                <button
+                  onClick={() => onNavigateChat ? onNavigateChat() : (window.location.href = '/chat')}
+                  className="w-full text-left text-emerald-400 hover:text-white transition-colors flex items-center justify-between font-medium"
+                >
+                  <span className="flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>Indunix Chat (Free)</span>
+                  </span>
+                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-300">chat.indunixai.com</span>
                 </button>
               </li>
             </ul>

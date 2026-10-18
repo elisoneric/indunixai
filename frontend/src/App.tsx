@@ -19,9 +19,10 @@ import { HelpDeskModal } from './components/modals/HelpDeskModal';
 import { EnterpriseContactModal } from './components/modals/EnterpriseContactModal';
 import { ConsoleLayout } from './components/console/ConsoleLayout';
 import { AdminPage } from './components/admin/AdminPage';
+import { ChatPlatform } from './components/chat/ChatPlatform';
 
 export function App() {
-  const [currentPage, setCurrentPage] = useState<'landing' | 'console' | 'docs' | 'privacy' | 'terms' | 'auth' | 'admin'>('landing');
+  const [currentPage, setCurrentPage] = useState<'landing' | 'console' | 'docs' | 'privacy' | 'terms' | 'auth' | 'admin' | 'chat'>('landing');
   const [user, setUser] = useState<User | null>(null);
   const [wallet, setWallet] = useState<Wallet | null>(null);
   const [summary, setSummary] = useState<UsageSummary | null>(null);
@@ -51,6 +52,8 @@ export function App() {
       // Automatically strip legacy hash #console or #docs in favor of clean URLs
       if (hash === '#console' || hash === '#/console') {
         window.history.replaceState(null, '', '/console');
+      } else if (hash === '#chat' || hash === '#/chat') {
+        window.history.replaceState(null, '', '/chat');
       } else if (hash === '#docs' || hash.startsWith('#docs/') || hash.startsWith('#/docs')) {
         window.history.replaceState(null, '', '/docs');
       } else if (hash === '#privacy') {
@@ -67,7 +70,9 @@ export function App() {
 
       const activePath = window.location.pathname.toLowerCase();
 
-      if (host.startsWith('admin.') || activePath === '/admin' || hash === '#admin') {
+      if (host.startsWith('chat.') || activePath === '/chat' || hash === '#chat') {
+        setCurrentPage('chat');
+      } else if (host.startsWith('admin.') || activePath === '/admin' || hash === '#admin') {
         setCurrentPage('admin');
       } else if (host.startsWith('docs.') || activePath === '/docs' || hash === '#docs') {
         setCurrentPage('docs');
@@ -111,7 +116,7 @@ export function App() {
     await refreshUserData();
   };
 
-  const handleNavigate = (page: 'landing' | 'console' | 'docs' | 'privacy' | 'terms' | 'auth' | 'admin') => {
+  const handleNavigate = (page: 'landing' | 'console' | 'docs' | 'privacy' | 'terms' | 'auth' | 'admin' | 'chat') => {
     const currentUser = user || api.getUser();
     if (page === 'console' && !currentUser) {
       handleOpenAuth('login');
@@ -127,6 +132,11 @@ export function App() {
 
     if (page === 'admin') {
       window.history.pushState(null, '', '/admin');
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } else if (page === 'chat') {
+      if (!host.startsWith('chat.')) {
+        window.history.pushState(null, '', '/chat');
+      }
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } else if (page === 'docs') {
       if (!host.startsWith('docs.')) {
@@ -240,6 +250,21 @@ export function App() {
       {currentPage === 'admin' ? (
         /* Isolated Master System Administration Console (/admin) */
         <AdminPage onNavigateHome={() => handleNavigate('landing')} />
+      ) : currentPage === 'chat' ? (
+        /* Indunix AI Sovereign Chat Platform (/chat / chat.indunixai.com) */
+        <ChatPlatform
+          user={user}
+          wallet={wallet}
+          onOpenAuth={handleOpenAuth}
+          onOpenDeposit={() => {
+            if (user) {
+              setIsDepositOpen(true);
+            } else {
+              handleOpenAuth('register');
+            }
+          }}
+          onNavigate={(p) => handleNavigate(p as any)}
+        />
       ) : currentPage === 'console' && (user || api.getUser()) ? (
         /* Authenticated Developer Console View */
         <ConsoleLayout
@@ -433,6 +458,7 @@ export function App() {
                 setIsSalesContactOpen(true);
               }}
               onReadDocs={() => handleNavigate('docs')}
+              onOpenChat={() => handleNavigate('chat')}
             />
 
             <ModelMatrix 
@@ -476,6 +502,7 @@ export function App() {
             onNavigateDocs={() => handleNavigate('docs')}
             onNavigatePrivacy={() => handleNavigate('privacy')}
             onNavigateTerms={() => handleNavigate('terms')}
+            onNavigateChat={() => handleNavigate('chat')}
           />
         </div>
       )}

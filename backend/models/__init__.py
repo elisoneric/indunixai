@@ -5,6 +5,7 @@ from backend.models.usage import UsageLog
 from backend.models.enterprise import EnterpriseContract, BillingCycle, ContractStatus
 from backend.models.route import ModelRoute
 from backend.models.system_setting import SystemSetting
+from backend.models.conversation import Conversation, ChatMessage, GuestSession
 
 __all__ = [
     "User",
@@ -20,4 +21,8 @@ __all__ = [
     "ContractStatus",
     "ModelRoute",
     "SystemSetting",
+    "Conversation",
+    "ChatMessage",
+    "GuestSession",
 ]
+

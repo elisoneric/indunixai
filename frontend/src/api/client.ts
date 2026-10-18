@@ -203,9 +203,68 @@ export interface AdminFinancialReport {
   model_economics: ModelUnitEconomics[];
 }
 
+export interface GuestSession {
+  guest_token: string;
+  session_id: string;
+  messages_sent: number;
+  max_messages: number;
+  remaining_messages: number;
+  eligible_models: string[];
+  expires_at: string;
+}
+
+export interface ChatLimits {
+  tier: 'guest' | 'free' | 'pro';
+  messages_used: number;
+  messages_limit: number;
+  remaining_messages: number;
+  credits_balance_ngn: number;
+  bonus_credits_ngn: number;
+  total_available_ngn: number;
+  allowed_models: string[];
+  can_use_reasoning: boolean;
+  reset_interval: string;
+}
+
+export interface ChatMessageItem {
+  id: string;
+  conversation_id: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  reasoning_content?: string | null;
+  model?: string | null;
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  created_at: string;
+}
+
+export interface ConversationItem {
+  id: string;
+  title: string;
+  model: string;
+  is_pinned: boolean;
+  is_archived: boolean;
+  created_at: string;
+  updated_at: string;
+  message_count: number;
+  messages?: ChatMessageItem[];
+}
+
 function getAuthHeader(): Record<string, string> {
   const token = localStorage.getItem('indunix_token') || localStorage.getItem('axion_token');
   return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+function getChatAuthHeader(): Record<string, string> {
+  const userToken = localStorage.getItem('indunix_token') || localStorage.getItem('axion_token');
+  if (userToken) {
+    return { Authorization: `Bearer ${userToken}` };
+  }
+  const guestToken = localStorage.getItem('indunix_guest_token');
+  if (guestToken) {
+    return { Authorization: `Bearer ${guestToken}`, 'X-Guest-Token': guestToken };
+  }
+  return {};
 }
 
 function getAdminAuthHeader(): Record<string, string> {
@@ -941,5 +1000,213 @@ export const api = {
       throw new Error(err.detail || 'Failed to dispatch receipt to email');
     }
     return res.json();
+  },
+
+  // Indunix AI Chat Platform
+  async getOrCreateGuestSession(): Promise<GuestSession> {
+    const existingGuestToken = localStorage.getItem('indunix_guest_token');
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (existingGuestToken) {
+      headers['X-Guest-Token'] = existingGuestToken;
+    }
+    const res = await fetch(`${API_BASE}/api/chat/guest/session`, {
+      method: 'POST',
+      headers,
+    });
+    if (!res.ok) throw new Error('Failed to create guest chat session');
+    const data: GuestSession = await res.json();
+    if (data.guest_token) {
+      localStorage.setItem('indunix_guest_token', data.guest_token);
+    }
+    return data;
+  },
+
+  async getChatLimits(): Promise<ChatLimits> {
+    const res = await fetch(`${API_BASE}/api/chat/limits`, {
+      headers: getChatAuthHeader(),
+    });
+    if (!res.ok) throw new Error('Failed to load chat limits');
+    return res.json();
+  },
+
+  async getChatConversations(q?: string): Promise<ConversationItem[]> {
+    const params = new URLSearchParams();
+    if (q) params.set('q', q);
+    const res = await fetch(`${API_BASE}/api/chat/conversations?${params.toString()}`, {
+      headers: getChatAuthHeader(),
+    });
+    if (!res.ok) return [];
+    return res.json();
+  },
+
+  async createChatConversation(title?: string, model?: string): Promise<ConversationItem> {
+    const res = await fetch(`${API_BASE}/api/chat/conversations`, {
+      method: 'POST',
+      headers: { ...getChatAuthHeader(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: title || 'New Chat', model: model || 'indunix-1-core' }),
+    });
+    if (!res.ok) throw new Error('Failed to create conversation');
+    return res.json();
+  },
+
+  async getChatConversation(id: string): Promise<ConversationItem> {
+    const res = await fetch(`${API_BASE}/api/chat/conversations/${id}`, {
+      headers: getChatAuthHeader(),
+    });
+    if (!res.ok) throw new Error('Failed to load conversation');
+    return res.json();
+  },
+
+  async updateChatConversation(
+    id: string,
+    data: { title?: string; is_pinned?: boolean; is_archived?: boolean; model?: string }
+  ): Promise<ConversationItem> {
+    const res = await fetch(`${API_BASE}/api/chat/conversations/${id}`, {
+      method: 'PATCH',
+      headers: { ...getChatAuthHeader(), 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error('Failed to update conversation');
+    return res.json();
+  },
+
+  async deleteChatConversation(id: string): Promise<void> {
+    const res = await fetch(`${API_BASE}/api/chat/conversations/${id}`, {
+      method: 'DELETE',
+      headers: getChatAuthHeader(),
+    });
+    if (!res.ok) throw new Error('Failed to delete conversation');
+  },
+
+  async migrateGuestConversations(): Promise<{ status: string; migrated_count: number }> {
+    const guestToken = localStorage.getItem('indunix_guest_token');
+    if (!guestToken) return { status: 'none', migrated_count: 0 };
+    try {
+      const res = await fetch(`${API_BASE}/api/chat/conversations/migrate`, {
+        method: 'POST',
+        headers: { ...getAuthHeader(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ guest_token: guestToken }),
+      });
+      if (res.ok) {
+        localStorage.removeItem('indunix_guest_token');
+        return res.json();
+      }
+    } catch {
+      // non-fatal
+    }
+    return { status: 'error', migrated_count: 0 };
+  },
+
+  async exportChatConversation(id: string, format: 'markdown' | 'json' = 'markdown'): Promise<string | any> {
+    const res = await fetch(`${API_BASE}/api/chat/export/${id}?format=${format}`, {
+      headers: getChatAuthHeader(),
+    });
+    if (!res.ok) throw new Error('Failed to export conversation');
+    if (format === 'json') return res.json();
+    return res.text();
+  },
+
+  async streamChat(
+    payload: {
+      conversation_id?: string;
+      model: string;
+      messages: Array<{ role: string; content: string }>;
+      temperature?: number;
+    },
+    onMeta: (data: { conversation_id: string; message_id: string }) => void,
+    onChunk: (text: string) => void,
+    onDone: () => void,
+    onError: (err: string) => void,
+    signal?: AbortSignal
+  ) {
+    try {
+      // Ensure we have a guest token if unauthenticated
+      const token = localStorage.getItem('indunix_token') || localStorage.getItem('axion_token');
+      let guestToken = localStorage.getItem('indunix_guest_token');
+      if (!token && !guestToken) {
+        try {
+          const g = await api.getOrCreateGuestSession();
+          guestToken = g.guest_token;
+        } catch {
+          // ignore
+        }
+      }
+
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      } else if (guestToken) {
+        headers['Authorization'] = `Bearer ${guestToken}`;
+        headers['X-Guest-Token'] = guestToken;
+      }
+
+      const response = await fetch(`${API_BASE}/api/chat/completions`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          ...payload,
+          stream: true,
+        }),
+        signal,
+      });
+
+      if (!response.ok) {
+        const errObj = await response.json().catch(() => ({}));
+        const msg = errObj?.detail || errObj?.message || `Error ${response.status}: Failed to generate reply`;
+        onError(msg);
+        return;
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) {
+        onError('Streaming is not supported by your browser.');
+        return;
+      }
+
+      const decoder = new TextDecoder('utf-8');
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed || !trimmed.startsWith('data: ')) continue;
+          const dataStr = trimmed.slice(6);
+          if (dataStr === '[DONE]') {
+            onDone();
+            return;
+          }
+
+          try {
+            const parsed = JSON.parse(dataStr);
+            if (parsed.conversation_id && parsed.message_id) {
+              onMeta({ conversation_id: parsed.conversation_id, message_id: parsed.message_id });
+            }
+            const delta = parsed.choices?.[0]?.delta?.content;
+            if (delta) {
+              onChunk(delta);
+            }
+          } catch {
+            // ignore non-json SSE lines
+          }
+        }
+      }
+
+      onDone();
+    } catch (e: any) {
+      if (e.name === 'AbortError') {
+        onDone();
+        return;
+      }
+      onError(e.message || 'Network stream error');
+    }
   },
 };

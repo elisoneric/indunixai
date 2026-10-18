@@ -94,6 +94,7 @@ async def _seed_admin_and_load_settings(session_factory):
 async def init_db():
     import asyncio
     import logging
+    import backend.models  # Ensures all models are registered in Base.metadata
     logger = logging.getLogger("indunix.db")
     global engine, AsyncSessionLocal
 
