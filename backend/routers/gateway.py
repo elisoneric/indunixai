@@ -62,7 +62,7 @@ def get_model_descriptor(model_id: str) -> ModelDescriptor:
                 root=model_id,
                 description=f"Anthropic Claude compatible model alias ({model_id}) on Indunix Sovereign Gateway",
                 pricing_ngn_per_m=pricing,
-                context_window=200000
+                context_window=1000000
             )
         raise IndunixGatewayException(f"The model '{model_id}' does not exist", status_code=404, error_type="invalid_request_error")
     return ModelDescriptor(

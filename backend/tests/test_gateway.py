@@ -83,11 +83,18 @@ async def test_gateway_models_and_completions():
         model_res = await client.get("/v1/models/claude-sonnet-5-5")
         assert model_res.status_code == 200
         assert model_res.json()["id"] == "claude-sonnet-5-5"
+        assert model_res.json()["context_window"] == 1000000
 
         # Test GET /models/claude-sonnet-5-5 (root router)
         model_root_res = await client.get("/models/claude-sonnet-5-5")
         assert model_root_res.status_code == 200
         assert model_root_res.json()["id"] == "claude-sonnet-5-5"
+        assert model_root_res.json()["context_window"] == 1000000
+
+        # Test GET /v1/models/indunix-1-core has 1M context
+        core_model_res = await client.get("/v1/models/indunix-1-core")
+        assert core_model_res.status_code == 200
+        assert core_model_res.json()["context_window"] == 1000000
 
         # Test probe GET /v1/chat/completions/v1/messages
         probe_res = await client.get("/v1/chat/completions/v1/messages")

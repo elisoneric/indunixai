@@ -13,23 +13,23 @@ class ProxyEngine:
     # Internal Routing Map (NEVER LEAKED TO CLIENTS)
     ROUTING_MAP = {
         "indunix-1-spark": {
-            "upstream_provider": "groq",
-            "upstream_url": "https://api.groq.com/openai/v1/chat/completions",
-            "upstream_model": "llama-3.3-70b-versatile",
-            "api_key_env": "GROQ_API_KEY",
-            "fallback_model": "indunix-1-core"
+            "upstream_provider": "deepseek",
+            "upstream_url": "https://api.deepseek.com/chat/completions",
+            "upstream_model": "deepseek-flash",
+            "api_key_env": "DEEPSEEK_API_KEY",
+            "fallback_model": "axion-1-spark"
         },
         "indunix-1-core": {
             "upstream_provider": "deepseek",
             "upstream_url": "https://api.deepseek.com/chat/completions",
-            "upstream_model": "deepseek-chat",
+            "upstream_model": "deepseek-flash",
             "api_key_env": "DEEPSEEK_API_KEY",
             "fallback_model": "indunix-1-spark"
         },
         "indunix-1-reason": {
             "upstream_provider": "deepseek",
             "upstream_url": "https://api.deepseek.com/chat/completions",
-            "upstream_model": "deepseek-reasoner",
+            "upstream_model": "deepseek-v4-pro",
             "api_key_env": "DEEPSEEK_API_KEY",
             "fallback_model": "indunix-1-core"
         },
@@ -44,51 +44,51 @@ class ProxyEngine:
         "claude-sonnet-5-5": {
             "upstream_provider": "deepseek",
             "upstream_url": "https://api.deepseek.com/chat/completions",
-            "upstream_model": "deepseek-chat",
+            "upstream_model": "deepseek-flash",
             "api_key_env": "DEEPSEEK_API_KEY",
             "fallback_model": "indunix-1-spark"
         },
         "claude-opus-5-5": {
             "upstream_provider": "deepseek",
             "upstream_url": "https://api.deepseek.com/chat/completions",
-            "upstream_model": "deepseek-reasoner",
+            "upstream_model": "deepseek-v4-pro",
             "api_key_env": "DEEPSEEK_API_KEY",
             "fallback_model": "indunix-1-core"
         },
         "claude-haiku-5-5": {
-            "upstream_provider": "groq",
-            "upstream_url": "https://api.groq.com/openai/v1/chat/completions",
-            "upstream_model": "llama-3.3-70b-versatile",
-            "api_key_env": "GROQ_API_KEY",
-            "fallback_model": "indunix-1-core"
+            "upstream_provider": "deepseek",
+            "upstream_url": "https://api.deepseek.com/chat/completions",
+            "upstream_model": "deepseek-flash",
+            "api_key_env": "DEEPSEEK_API_KEY",
+            "fallback_model": "axion-1-spark"
         },
         "claude-3-5-sonnet-20241022": {
             "upstream_provider": "deepseek",
             "upstream_url": "https://api.deepseek.com/chat/completions",
-            "upstream_model": "deepseek-chat",
+            "upstream_model": "deepseek-flash",
             "api_key_env": "DEEPSEEK_API_KEY",
             "fallback_model": "indunix-1-spark"
         },
         "claude-3-7-sonnet": {
             "upstream_provider": "deepseek",
             "upstream_url": "https://api.deepseek.com/chat/completions",
-            "upstream_model": "deepseek-chat",
+            "upstream_model": "deepseek-flash",
             "api_key_env": "DEEPSEEK_API_KEY",
             "fallback_model": "indunix-1-spark"
         },
         "claude-3-opus-20240229": {
             "upstream_provider": "deepseek",
             "upstream_url": "https://api.deepseek.com/chat/completions",
-            "upstream_model": "deepseek-reasoner",
+            "upstream_model": "deepseek-v4-pro",
             "api_key_env": "DEEPSEEK_API_KEY",
             "fallback_model": "indunix-1-core"
         },
         "claude-3-5-haiku-20241022": {
-            "upstream_provider": "groq",
-            "upstream_url": "https://api.groq.com/openai/v1/chat/completions",
-            "upstream_model": "llama-3.3-70b-versatile",
-            "api_key_env": "GROQ_API_KEY",
-            "fallback_model": "indunix-1-core"
+            "upstream_provider": "deepseek",
+            "upstream_url": "https://api.deepseek.com/chat/completions",
+            "upstream_model": "deepseek-flash",
+            "api_key_env": "DEEPSEEK_API_KEY",
+            "fallback_model": "axion-1-spark"
         },
         # Backwards compatible mappings
         "axion-1-spark": {
@@ -153,6 +153,11 @@ class ProxyEngine:
     def _sanitize_response(self, text: str, public_model: str) -> str:
         """Strips any internal provider names from response text."""
         replacements = [
+            ("DeepSeek-V4-Pro", f"Indunix 1 Reason ({public_model})"),
+            ("DeepSeek-V4.1-Flash", f"Indunix 1 Core ({public_model})"),
+            ("DeepSeek-V4", f"Indunix AI ({public_model})"),
+            ("deepseek-v4-pro", public_model),
+            ("deepseek-flash", public_model),
             ("DeepSeek-R1", f"Indunix 1 Reason ({public_model})"),
             ("DeepSeek-V3", f"Indunix 1 Core ({public_model})"),
             ("DeepSeek", "Indunix AI"),
@@ -269,6 +274,12 @@ class ProxyEngine:
         upstream_payload = request.model_dump(exclude_none=True)
         upstream_payload["model"] = route["upstream_model"]
         upstream_payload["stream"] = False
+
+        if provider == "deepseek":
+            if "opus" in model.lower() or "reason" in model.lower():
+                upstream_payload["thinking"] = {"type": "enabled"}
+            elif route["upstream_model"] == "deepseek-flash" and "thinking" not in upstream_payload:
+                upstream_payload["thinking"] = {"type": "disabled"}
 
         max_attempts = max(1, len(candidate_keys))
         for attempt in range(max_attempts):
@@ -398,6 +409,12 @@ class ProxyEngine:
         upstream_payload = request.model_dump(exclude_none=True)
         upstream_payload["model"] = route["upstream_model"]
         upstream_payload["stream"] = True
+
+        if provider == "deepseek":
+            if "opus" in model.lower() or "reason" in model.lower():
+                upstream_payload["thinking"] = {"type": "enabled"}
+            elif route["upstream_model"] == "deepseek-flash" and "thinking" not in upstream_payload:
+                upstream_payload["thinking"] = {"type": "disabled"}
 
         max_attempts = max(1, len(candidate_keys))
         stream_started = False
