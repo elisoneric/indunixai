@@ -40,6 +40,56 @@ class ProxyEngine:
             "api_key_env": None,
             "fallback_model": "indunix-1-core"
         },
+        # Claude-compatible aliases (for Claude Desktop & Claude Code)
+        "claude-sonnet-5-5": {
+            "upstream_provider": "deepseek",
+            "upstream_url": "https://api.deepseek.com/chat/completions",
+            "upstream_model": "deepseek-chat",
+            "api_key_env": "DEEPSEEK_API_KEY",
+            "fallback_model": "indunix-1-spark"
+        },
+        "claude-opus-5-5": {
+            "upstream_provider": "deepseek",
+            "upstream_url": "https://api.deepseek.com/chat/completions",
+            "upstream_model": "deepseek-reasoner",
+            "api_key_env": "DEEPSEEK_API_KEY",
+            "fallback_model": "indunix-1-core"
+        },
+        "claude-haiku-5-5": {
+            "upstream_provider": "groq",
+            "upstream_url": "https://api.groq.com/openai/v1/chat/completions",
+            "upstream_model": "llama-3.3-70b-versatile",
+            "api_key_env": "GROQ_API_KEY",
+            "fallback_model": "indunix-1-core"
+        },
+        "claude-3-5-sonnet-20241022": {
+            "upstream_provider": "deepseek",
+            "upstream_url": "https://api.deepseek.com/chat/completions",
+            "upstream_model": "deepseek-chat",
+            "api_key_env": "DEEPSEEK_API_KEY",
+            "fallback_model": "indunix-1-spark"
+        },
+        "claude-3-7-sonnet": {
+            "upstream_provider": "deepseek",
+            "upstream_url": "https://api.deepseek.com/chat/completions",
+            "upstream_model": "deepseek-chat",
+            "api_key_env": "DEEPSEEK_API_KEY",
+            "fallback_model": "indunix-1-spark"
+        },
+        "claude-3-opus-20240229": {
+            "upstream_provider": "deepseek",
+            "upstream_url": "https://api.deepseek.com/chat/completions",
+            "upstream_model": "deepseek-reasoner",
+            "api_key_env": "DEEPSEEK_API_KEY",
+            "fallback_model": "indunix-1-core"
+        },
+        "claude-3-5-haiku-20241022": {
+            "upstream_provider": "groq",
+            "upstream_url": "https://api.groq.com/openai/v1/chat/completions",
+            "upstream_model": "llama-3.3-70b-versatile",
+            "api_key_env": "GROQ_API_KEY",
+            "fallback_model": "indunix-1-core"
+        },
         # Backwards compatible mappings
         "axion-1-spark": {
             "upstream_provider": "groq",
@@ -78,6 +128,18 @@ class ProxyEngine:
         )
         key_pool.sync_from_settings(settings)
 
+    def _resolve_route(self, model: str) -> tuple[Dict[str, Any], str]:
+        """Resolves the routing map and internal model fallback for any public model name."""
+        if model in self.ROUTING_MAP:
+            return self.ROUTING_MAP[model], model
+        m_lower = model.lower()
+        if "haiku" in m_lower or "spark" in m_lower:
+            return self.ROUTING_MAP["indunix-1-spark"], "indunix-1-spark"
+        elif "opus" in m_lower or "reason" in m_lower:
+            return self.ROUTING_MAP["indunix-1-reason"], "indunix-1-reason"
+        else:
+            return self.ROUTING_MAP["indunix-1-core"], "indunix-1-core"
+
     def _get_candidate_keys(self, route: Dict[str, Any]) -> List[str]:
         """Returns candidate keys for the given model route from key pool or environment settings."""
         provider = route.get("upstream_provider")
@@ -114,9 +176,9 @@ class ProxyEngine:
                 last_msg = str(m.get("content", ""))
                 break
         
-        last_msg_lower = last_msg.lower()
+        m_lower = model.lower()
 
-        if model in ("indunix-1-reason", "axion-1-reason"):
+        if model in ("indunix-1-reason", "axion-1-reason") or "opus" in m_lower or "reason" in m_lower:
             return (
                 "<think>\n"
                 "1. Assessing corporate executive query: \"" + last_msg[:60] + "...\"\n"
@@ -136,7 +198,7 @@ class ProxyEngine:
                 f"3. **Board Advisory Recommendation:** Maintain 100% operational billing in Nigerian Naira (NGN) to eliminate FX budget fluctuations.\n\n"
                 f"**Conclusion:** Enterprise workflow verified for immediate corporate execution."
             )
-        elif model in ("indunix-1-spark", "axion-1-spark"):
+        elif model in ("indunix-1-spark", "axion-1-spark") or "haiku" in m_lower or "spark" in m_lower:
             return (
                 f"⚡ **Indunix 1 Spark (Enterprise Operations & Support)**:\n\n"
                 f"• **Task Category:** Automated Business Workflow & Incident Triage\n"
@@ -151,14 +213,14 @@ class ProxyEngine:
                 f"• **Tenant Authorization:** Active 24-hour cryptographic runtime lease verified\n"
                 f"• **Executive Summary:** Local corporate copilot generated confidential analysis for company query: *'{last_msg}'*."
             )
-        else: # indunix-1-core / axion-1-core
+        else: # indunix-1-core / axion-1-core / claude-sonnet-5-5
             return (
                 f"**Indunix 1 Core Enterprise Intelligence Report**:\n\n"
                 f"**Subject:** Corporate Operational Analysis & Workflow Automation\n\n"
                 f"I have evaluated the business query: *\"{last_msg}\"*\n\n"
                 f"1. **Operational Efficiency:** Automated enterprise pipelines reduce processing cycle times from 48 hours to real-time sub-second execution.\n"
                 f"2. **Cost Optimization:** Consolidating business intelligence onto Indunix AI eliminates foreign currency volatility, settling 100% of operational compute in Naira (NGN).\n"
-                f"3. **Recommended Next Steps:** Integrate this workflow directly into company ERP/CRM endpoints using standard OpenAI SDK clients (`api.indunixai.com/v1`)."
+                f"3. **Recommended Next Steps:** Integrate this workflow directly into company ERP/CRM endpoints using standard OpenAI or Anthropic SDK clients (`api.indunixai.com/v1`)."
             )
 
     async def execute_non_streaming(
@@ -167,7 +229,7 @@ class ProxyEngine:
         model: str
     ) -> Dict[str, Any]:
         """Executes non-streaming request with parallel key pool rotation and 429 failover."""
-        route = self.ROUTING_MAP.get(model, self.ROUTING_MAP["indunix-1-core"])
+        route, mapped_model = self._resolve_route(model)
         provider = route.get("upstream_provider", "deepseek")
         candidate_keys = self._get_candidate_keys(route)
 
@@ -272,7 +334,7 @@ class ProxyEngine:
         Executes streaming SSE response with sub-15ms overhead, parallel key rotation, and 429 failover.
         Yields standard SSE lines: data: { ... }\n\n
         """
-        route = self.ROUTING_MAP.get(model, self.ROUTING_MAP["indunix-1-core"])
+        route, mapped_model = self._resolve_route(model)
         provider = route.get("upstream_provider", "deepseek")
         candidate_keys = self._get_candidate_keys(route)
 

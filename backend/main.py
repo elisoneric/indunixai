@@ -61,6 +61,7 @@ app.add_middleware(
 
 # Gateway and Service Routers
 app.include_router(gateway.router)
+app.include_router(gateway.root_gateway_router)
 app.include_router(auth.router)
 app.include_router(keys.router)
 app.include_router(billing.router)

@@ -3,7 +3,7 @@ import { X, Code2, Copy, Check, ExternalLink, Terminal, Shield, Zap, BookOpen } 
 
 interface DeveloperDocsModalProps {
   isOpen: boolean;
-  initialTab?: 'openai' | 'cursor' | 'frameworks' | 'security';
+  initialTab?: 'openai' | 'claude' | 'cursor' | 'frameworks' | 'security';
   onClose: () => void;
   onOpenFullDocs?: () => void;
 }
@@ -14,7 +14,7 @@ export const DeveloperDocsModal: React.FC<DeveloperDocsModalProps> = ({
   onClose,
   onOpenFullDocs,
 }) => {
-  const [tab, setTab] = useState<'openai' | 'cursor' | 'frameworks' | 'security'>(initialTab);
+  const [tab, setTab] = useState<'openai' | 'claude' | 'cursor' | 'frameworks' | 'security'>(initialTab);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   if (!isOpen) return null;
@@ -47,7 +47,7 @@ export const DeveloperDocsModal: React.FC<DeveloperDocsModalProps> = ({
                 Developer Integration & API Documentation
               </h3>
               <p className="text-xs text-slate-400">
-                100% OpenAI SDK Compatible (`https://api.indunixai.com/v1`)
+                100% OpenAI & Anthropic Claude SDK Compatible (`https://api.indunixai.com/v1`)
               </p>
             </div>
           </div>
@@ -69,10 +69,11 @@ export const DeveloperDocsModal: React.FC<DeveloperDocsModalProps> = ({
         {/* Tabs */}
         <div className="flex gap-2 border-b border-slate-800/80 pb-3 mb-4 overflow-x-auto text-xs font-mono">
           {[
-            { id: 'openai', label: 'OpenAI SDK (Python & Node)' },
-            { id: 'cursor', label: 'Cursor & VS Code Setup' },
+            { id: 'openai', label: 'OpenAI SDK' },
+            { id: 'claude', label: 'Claude Code & Desktop' },
+            { id: 'cursor', label: 'Cursor & VS Code' },
             { id: 'frameworks', label: 'LangChain & LlamaIndex' },
-            { id: 'security', label: 'HMAC SHA-512 Security' },
+            { id: 'security', label: 'HMAC Security' },
           ].map((t) => (
             <button
               key={t.id}
@@ -151,6 +152,68 @@ const completion = await client.chat.completions.create({
   messages: [{ role: "user", content: "Analyze cash flow runway" }],
 });
 console.log(completion.choices[0].message.content);`}
+                </pre>
+              </div>
+            </div>
+          )}
+
+          {tab === 'claude' && (
+            <div className="space-y-4">
+              <p className="text-slate-400 text-xs font-sans">
+                Connect Claude Code CLI and Claude Desktop directly to Indunix AI sovereign models without foreign currency constraints.
+              </p>
+
+              <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 space-y-3 font-sans">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-white font-bold text-xs uppercase tracking-wider font-mono">Claude Code CLI Setup:</h4>
+                  <button
+                    onClick={() => copyToClipboard(`export ANTHROPIC_BASE_URL="https://api.indunixai.com/v1"
+export ANTHROPIC_API_KEY="indunix-live-sk-YOUR_KEY"
+claude --model claude-sonnet-5-5`, 'claude-cli')}
+                    className="flex items-center gap-1 text-[11px] text-emerald-400 hover:text-emerald-300 font-mono"
+                  >
+                    {copiedKey === 'claude-cli' ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                    <span>{copiedKey === 'claude-cli' ? 'Copied' : 'Copy'}</span>
+                  </button>
+                </div>
+                <pre className="p-3 bg-slate-950 rounded-lg border border-slate-800 text-xs text-emerald-400 font-mono overflow-x-auto leading-relaxed">
+{`# 1. Point Anthropic Base URL to Indunix Sovereign Gateway
+export ANTHROPIC_BASE_URL="https://api.indunixai.com/v1"
+
+# 2. Set your Indunix API Key
+export ANTHROPIC_API_KEY="indunix-live-sk-YOUR_KEY"
+
+# 3. Launch Claude Code with your desired model alias
+claude --model claude-sonnet-5-5`}
+                </pre>
+                <p className="text-[11px] text-slate-400 font-sans">
+                  Supported models: <code className="text-emerald-400 font-mono">claude-sonnet-5-5</code>, <code className="text-emerald-400 font-mono">claude-opus-5-5</code>, <code className="text-emerald-400 font-mono">claude-haiku-5-5</code>.
+                </p>
+              </div>
+
+              <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 space-y-3 font-sans">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-white font-bold text-xs uppercase tracking-wider font-mono">Claude Desktop Configuration:</h4>
+                  <button
+                    onClick={() => copyToClipboard(`{
+  "anthropic_base_url": "https://api.indunixai.com/v1",
+  "anthropic_api_key": "indunix-live-sk-YOUR_KEY",
+  "default_model": "claude-sonnet-5-5"
+}`, 'claude-desktop')}
+                    className="flex items-center gap-1 text-[11px] text-emerald-400 hover:text-emerald-300 font-mono"
+                  >
+                    {copiedKey === 'claude-desktop' ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                    <span>{copiedKey === 'claude-desktop' ? 'Copied' : 'Copy'}</span>
+                  </button>
+                </div>
+                <pre className="p-3 bg-slate-950 rounded-lg border border-slate-800 text-xs text-slate-300 font-mono overflow-x-auto leading-relaxed">
+{`// Add to claude_desktop_config.json
+{
+  "env": {
+    "ANTHROPIC_BASE_URL": "https://api.indunixai.com/v1",
+    "ANTHROPIC_API_KEY": "indunix-live-sk-YOUR_KEY"
+  }
+}`}
                 </pre>
               </div>
             </div>

@@ -73,3 +73,91 @@ async def test_gateway_models_and_completions():
         wallet_res = await client.get("/api/billing/wallet", headers=headers)
         wallet = wallet_res.json()
         assert wallet["bonus_credits_ngn"] < 1000.0 # Deduction made from promo credits
+
+        # 6. Test Claude Models in /v1/models and /models
+        assert "claude-sonnet-5-5" in model_ids
+        assert "claude-opus-5-5" in model_ids
+        assert "claude-haiku-5-5" in model_ids
+
+        # Test GET /v1/models/claude-sonnet-5-5
+        model_res = await client.get("/v1/models/claude-sonnet-5-5")
+        assert model_res.status_code == 200
+        assert model_res.json()["id"] == "claude-sonnet-5-5"
+
+        # Test GET /models/claude-sonnet-5-5 (root router)
+        model_root_res = await client.get("/models/claude-sonnet-5-5")
+        assert model_root_res.status_code == 200
+        assert model_root_res.json()["id"] == "claude-sonnet-5-5"
+
+        # Test probe GET /v1/chat/completions/v1/messages
+        probe_res = await client.get("/v1/chat/completions/v1/messages")
+        assert probe_res.status_code == 200
+        assert probe_res.json()["status"] == "operational"
+
+        # 7. Test Anthropic Messages API with x-api-key header on standard /v1/messages
+        anthropic_headers = {
+            "x-api-key": secret_key,
+            "anthropic-version": "2023-06-01"
+        }
+        msg_res = await client.post(
+            "/v1/messages",
+            json={
+                "model": "claude-sonnet-5-5",
+                "messages": [
+                    {"role": "user", "content": "Hello Claude from Indunix AI"}
+                ],
+                "max_tokens": 512,
+                "stream": False
+            },
+            headers=anthropic_headers
+        )
+        assert msg_res.status_code == 200, msg_res.text
+        msg_data = msg_res.json()
+        assert msg_data["type"] == "message"
+        assert msg_data["role"] == "assistant"
+        assert msg_data["model"] == "claude-sonnet-5-5"
+        assert len(msg_data["content"]) > 0
+        assert msg_data["content"][0]["type"] == "text"
+        assert len(msg_data["content"][0]["text"]) > 0
+        assert msg_data["stop_reason"] == "end_turn"
+
+        # 8. Test the EXACT URL from the user's error:
+        # requestUrl: https://api.indunixai.com/v1/chat/completions/v1/messages
+        # probedModel: claude-sonnet-5-5
+        error_url_res = await client.post(
+            "/v1/chat/completions/v1/messages",
+            json={
+                "model": "claude-sonnet-5-5",
+                "messages": [
+                    {"role": "user", "content": "Ping test probe"}
+                ],
+                "max_tokens": 100,
+                "stream": False
+            },
+            headers=anthropic_headers
+        )
+        assert error_url_res.status_code == 200, error_url_res.text
+        assert error_url_res.json()["model"] == "claude-sonnet-5-5"
+
+        # 9. Test Anthropic Streaming Mode
+        stream_msg_res = await client.post(
+            "/v1/messages",
+            json={
+                "model": "claude-opus-5-5",
+                "messages": [
+                    {"role": "user", "content": "Explain enterprise sovereignty"}
+                ],
+                "max_tokens": 512,
+                "stream": True
+            },
+            headers=anthropic_headers
+        )
+        assert stream_msg_res.status_code == 200
+        assert "text/event-stream" in stream_msg_res.headers.get("content-type", "")
+        stream_body = stream_msg_res.text
+        assert "event: message_start" in stream_body
+        assert "event: content_block_start" in stream_body
+        assert "event: content_block_delta" in stream_body
+        assert "event: content_block_stop" in stream_body
+        assert "event: message_delta" in stream_body
+        assert "event: message_stop" in stream_body

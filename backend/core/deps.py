@@ -39,22 +39,31 @@ async def get_current_user(
 
 async def get_gateway_auth(
     authorization: Optional[str] = Header(None),
+    x_api_key: Optional[str] = Header(None, alias="x-api-key"),
     db: AsyncSession = Depends(get_db)
 ) -> Tuple[User, Optional[ApiKey]]:
     """
-    Authenticates gateway /v1 requests.
+    Authenticates gateway /v1 and Anthropic /messages requests.
     Supports:
-    1. Header: 'Authorization: Bearer axion-live-sk-...' (Standard OpenAI SDK format)
-    2. Header: 'Authorization: Bearer <JWT>' (Browser playground session)
+    1. Header: 'x-api-key: indunix-live-sk-...' (Anthropic / Claude Desktop & Claude Code format)
+    2. Header: 'Authorization: Bearer indunix-live-sk-...' (Standard OpenAI SDK format)
+    3. Header: 'Authorization: Bearer <JWT>' (Browser playground session)
     """
-    if not authorization:
-        raise InvalidApiKeyException("Missing Authorization header. Expected Bearer axion-live-sk-...")
+    token_str = None
+    if x_api_key:
+        token_str = x_api_key.strip()
+    elif authorization:
+        parts = authorization.strip().split(" ")
+        if len(parts) == 2 and parts[0].lower() == "bearer":
+            token_str = parts[1].strip()
+        else:
+            token_str = authorization.strip()
 
-    parts = authorization.strip().split(" ")
-    if len(parts) != 2 or parts[0].lower() != "bearer":
-        raise InvalidApiKeyException("Malformed Authorization header. Format: Bearer <key>")
+    if not token_str:
+        raise InvalidApiKeyException("Missing API key. Provide 'x-api-key' or 'Authorization: Bearer <key>'.")
 
-    token_str = parts[1].strip()
+    if token_str.lower().startswith("bearer "):
+        token_str = token_str[7:].strip()
 
     # Case 1: Standard Indunix or Axion API Key
     if token_str.startswith(("indunix-live-", "axion-live-")):
@@ -71,6 +80,19 @@ async def get_gateway_auth(
         if not user or not user.is_active:
             raise InvalidApiKeyException("User account associated with this key is inactive.")
 
+        return user, api_key
+
+    # Check database in case custom key
+    hashed = hash_api_key(token_str)
+    result = await db.execute(select(ApiKey).where(ApiKey.hashed_secret == hashed))
+    api_key = result.scalar_one_or_none()
+    if api_key:
+        if not api_key.is_active:
+            raise InvalidApiKeyException("This Indunix API key has been revoked.")
+        user_res = await db.execute(select(User).where(User.id == api_key.user_id))
+        user = user_res.scalar_one_or_none()
+        if not user or not user.is_active:
+            raise InvalidApiKeyException("User account associated with this key is inactive.")
         return user, api_key
 
     # Case 2: Playground or Console JWT

@@ -65,3 +65,51 @@ class ModelDescriptor(BaseModel):
 class ModelListResponse(BaseModel):
     object: str = "list"
     data: List[ModelDescriptor]
+
+# Anthropic Claude Messages API Schemas (for Claude Desktop & Claude Code)
+class AnthropicContentBlock(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    type: str = "text"
+    text: Optional[str] = ""
+    id: Optional[str] = None
+    name: Optional[str] = None
+    input: Optional[Dict[str, Any]] = None
+    content: Optional[Union[str, List[Any]]] = None
+
+class AnthropicMessage(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    role: str
+    content: Union[str, List[Union[AnthropicContentBlock, Dict[str, Any], str]]]
+
+class AnthropicMessagesRequest(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    model: str
+    messages: List[AnthropicMessage]
+    system: Optional[Union[str, List[Union[AnthropicContentBlock, Dict[str, Any], str]]]] = None
+    max_tokens: Optional[int] = 4096
+    temperature: Optional[float] = 1.0
+    top_p: Optional[float] = None
+    top_k: Optional[int] = None
+    stream: Optional[bool] = False
+    metadata: Optional[Dict[str, Any]] = None
+    stop_sequences: Optional[List[str]] = None
+    tools: Optional[List[Dict[str, Any]]] = None
+    tool_choice: Optional[Union[str, Dict[str, Any]]] = None
+
+class AnthropicResponseContentBlock(BaseModel):
+    type: str = "text"
+    text: str
+
+class AnthropicUsage(BaseModel):
+    input_tokens: int = 0
+    output_tokens: int = 0
+
+class AnthropicMessagesResponse(BaseModel):
+    id: str
+    type: str = "message"
+    role: str = "assistant"
+    model: str
+    content: List[AnthropicResponseContentBlock]
+    stop_reason: Optional[str] = "end_turn"
+    stop_sequence: Optional[str] = None
+    usage: AnthropicUsage
